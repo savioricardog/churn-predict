@@ -1,9 +1,13 @@
-# 🚜 Detecção de Fraudes em transações bancárias (LightGBM + Learning Rate + Class_Weight)
+# 🚜 Classificação de Clientes que darão Churn (LightGBM + Learning Rate + Class_Weight)
 
 ## 📋 Sobre o Projeto
-Este projeto resolve um problema muito comum em instituições financeiras: Transações fraudulentas.
+Este projeto resolve um problema muito comum em toda e qualquer empresa: Churn de clientes.
 
-O principal desafio foi lidar com dados de **Alta Especificidade** e **Distribuição Assimétrica** (muitas transações normais e pouquissimas de fraudes).
+O principal desafio neste caso/projeto é conseguir entender as ocilações do comportamento humano, para assim conseguir traçar um padrão de perfil de usuários que da churn.
+
+## 📋 Entendimento de négocios.
+Realizando EDA pode-se concluir alguns padrões que ajudam a basear a classifição de Churn para tal Cliente.
+Clientes mais propensos a churn utilizam menos produtos que clientes menos propensos.
 
 ## 🧠 Estratégia de Modelagem
 
