@@ -24,6 +24,7 @@ import joblib
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
+import mlflow
 
 sys.path.append(os.path.abspath(os.path.join('..')))
 from src.eng_funcs import CleanTransformStrNum, AnalyseDataSet
@@ -33,6 +34,8 @@ from src.eng_funcs import CleanTransformStrNum, AnalyseDataSet
 #%%
 pd.set_option('display.max_columns', 50)
 pd.set_option('display.max_rows', 500)
+# mlflow.set_tracking_uri('https://localhost:5000')
+# mlflow.set_experiment(experiment_id=)
 
 %load_ext autoreload
 %reload_ext autoreload
@@ -44,6 +47,7 @@ pd.set_option('display.max_rows', 500)
 path = kagglehub.dataset_download("yeanzc/telco-customer-churn-ibm-dataset")
 print("Path to dataset files:", path)
 
+
 #%% [markdown]
 # ## -- VARIABLES CONFIG --
 #%%
@@ -54,8 +58,51 @@ path_dataset = os.path.join(path, 'Telco_customer_churn.xlsx')
 #%%
 df = pd.read_excel(path_dataset, engine = 'calamine')
 df.head(5)
+
+
 #%% [markdown]
-# ## -- UNDERSTANDING DATASET - EDA --
+# # --- FEATURE ENGINE ---
+#%%
+
+# NEW DF FOR TRANSFORMS
+df_aux = df.copy()
+
+# ADJUSTING TOTAL CHARGES COLUMN
+df_aux['Total Charges'] = df_aux['Total Charges'].apply(lambda x: 0 if x == ' ' else x)
+
+# COLUMN RELATIVE PRICE UP OR DOWN
+df_aux['Price Up Recently'] = (df_aux['Monthly Charges'].astype(float) -
+                                (df_aux['Total Charges'].astype(float) / 
+                                    df_aux['Tenure Months']).astype(float)).round(2)
+
+# COLUMN RELATIVE PRICE ESTIMATED VS PRICE PRICE PAYED
+df['Price Sensitivity'] = df['Monthly Charges'] / df['CLTV']
+
+services_offer = ['Phone Service','Multiple Lines','Internet Service',
+                  'Online Security','Online Backup','Device Protection',
+                  'Tech Support','Streaming TV','Streaming Movies']
+
+df_aux['Score dependency'] = 0
+df_aux['Lazer'] = 0
+df_aux['Security'] = 0
+
+for score in df_aux[services_offer]:
+    points = np.where(df_aux[score].astype(str).str.contains('No'), 0, 1)
+    df_aux['Score dependency'] = df_aux['Score dependency'] + points
+
+for lazer in df[['Streaming TV','Streaming Movies']]:
+    points = np.where(df[lazer].astype(str).str.contains('No'), 0, 1)
+    df_aux['Lazer'] = df_aux['Lazer'] + points
+
+for security in df[['Online Security','Online Backup','Device Protection']]:
+    points = np.where(df[security].astype(str).str.contains('No'), 0, 1)
+    df_aux['Security'] = df_aux['Security'] + points
+
+df_aux['Senior Vulnerable'] = np.where((df_aux['Senior Citizen'] == 'Yes') & (df_aux['Tech Support'] == 'No'), 1, 0)
+df_aux['Family'] = np.where((df_aux['Partner'] == 'Yes') | (df_aux['Dependents'] == 'Yes'), 1, 0)
+
+#%% [markdown]
+# # --- UNDERSTANDING DATASET - EDA ---
 #%% [markdown]
 # ## -- DATASET GENERAL INFOS --
 #%%
@@ -310,6 +357,11 @@ grid = GridSearchCV(
 #%% [markdown]
 # # --- FITTING GRID MODEL ---
 #%%
+
+# with mlflow.start_run() as r:
+
+# mlflow.sklearn.autolog()
+
 print("Fitting model!")
 model_fitted = grid.fit(X_train, y_train)
 print("Model fitted!")
@@ -318,6 +370,7 @@ print("Model fitted!")
 # #%% [markdown]
 # # # --- TESTING STACKING MODELS ---
 # #%%
+
 # # TAKING BEST RANDOM FOREST MODEL
 # best_rf_model = model_fitted.best_estimator_.named_steps['model']
 
@@ -380,7 +433,6 @@ print("Doing Data Predict!")
 predicted_model = model_fitted.predict(X_test)
 proba_predicted_model = model_fitted.predict_proba(X_test)[:, 1]
 print("Predict Conclued!")
-#%%
 
 f1_score_metric = f1_score(y_test, predicted_model)
 
@@ -421,7 +473,7 @@ plt.show()
 auc_score = roc_auc_score(y_test, proba_predicted_model)
 print(f"ROC-AUC Score: {auc_score:.4f}")
 print(f'{model_fitted.best_estimator_.named_steps["model"]} \n'
-      f'{f1_score_metric}')
+        f'{f1_score_metric}')
 
 #%%
 # analisando os 10 melhores modelos
@@ -449,7 +501,7 @@ display(results_df.head(10))
 # names_custom = ['Total Charges']
 
 model = model_fitted.best_estimator_.named_steps['model']
-importance = model.feature_importances_
+importance = model.feature_importances_/100
 
 preprocessor_steps = model_fitted.best_estimator_.named_steps['preprocessor']
 features_names = preprocessor_steps.get_feature_names_out()
@@ -469,6 +521,8 @@ plt.show()
 
 
 print(df_importance.head(10))
+
+mlflow.log_metrics()
 
 #%% [markdown]
 # # --- ANALYSING MODEL METRICS ---
