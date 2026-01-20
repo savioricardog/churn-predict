@@ -9,13 +9,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold, RandomizedSearchCV
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from feature_engine import discretisation, encoding
 from sklearn.preprocessing import StandardScaler, RobustScaler, OneHotEncoder, OrdinalEncoder, TargetEncoder
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, roc_auc_score
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, roc_auc_score, roc_curve
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingClassifier, StackingClassifier, RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -26,6 +26,8 @@ from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 import mlflow
 
+from sklearn.cluster import KMeans
+
 sys.path.append(os.path.abspath(os.path.join('..')))
 from src.eng_funcs import CleanTransformStrNum, AnalyseDataSet
 
@@ -34,8 +36,9 @@ from src.eng_funcs import CleanTransformStrNum, AnalyseDataSet
 #%%
 pd.set_option('display.max_columns', 50)
 pd.set_option('display.max_rows', 500)
-# mlflow.set_tracking_uri('https://localhost:5000')
-# mlflow.set_experiment(experiment_id=)
+
+mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_experiment(experiment_id='1')
 
 %load_ext autoreload
 %reload_ext autoreload
@@ -62,44 +65,85 @@ df.head(5)
 
 #%% [markdown]
 # # --- FEATURE ENGINE ---
+
+#%% [markdown]
+# ## -- DF_AUX TEST --
 #%%
 
-# NEW DF FOR TRANSFORMS
 df_aux = df.copy()
 
 # ADJUSTING TOTAL CHARGES COLUMN
 df_aux['Total Charges'] = df_aux['Total Charges'].apply(lambda x: 0 if x == ' ' else x)
 
-# COLUMN RELATIVE PRICE UP OR DOWN
-df_aux['Price Up Recently'] = (df_aux['Monthly Charges'].astype(float) -
-                                (df_aux['Total Charges'].astype(float) / 
-                                    df_aux['Tenure Months']).astype(float)).round(2)
+# FEATURE RELATIVE PRICE UP OR DOWN
+df_aux['Price Up Recently'] = np.where(
+                            df_aux['Tenure Months'] > 0,
+                            df_aux['Total Charges'] / df_aux['Tenure Months'],
+                            df_aux['Monthly Charges'])
 
-# COLUMN RELATIVE PRICE ESTIMATED VS PRICE PRICE PAYED
+# PERCENT PRICE DIFFERENCE
+df_aux['Price Hike'] = df_aux['Monthly Charges'] - df_aux['Price Up Recently']
+
+# FEATURE RELATIVE PRICE ESTIMATED VS PRICE PRICE PAYED
 df['Price Sensitivity'] = df['Monthly Charges'] / df['CLTV']
 
+# SEPARATING SERVICE COLUMNS
 services_offer = ['Phone Service','Multiple Lines','Internet Service',
                   'Online Security','Online Backup','Device Protection',
                   'Tech Support','Streaming TV','Streaming Movies']
 
+# CREATING NEW FEATURES
 df_aux['Score dependency'] = 0
-df_aux['Lazer'] = 0
-df_aux['Security'] = 0
+df_aux['Lazer Products'] = 0
+df_aux['Security Product'] = 0
 
+# FLAG FEATURE ABOUT BOUGHT PRODUCTS
 for score in df_aux[services_offer]:
     points = np.where(df_aux[score].astype(str).str.contains('No'), 0, 1)
     df_aux['Score dependency'] = df_aux['Score dependency'] + points
 
 for lazer in df[['Streaming TV','Streaming Movies']]:
     points = np.where(df[lazer].astype(str).str.contains('No'), 0, 1)
-    df_aux['Lazer'] = df_aux['Lazer'] + points
+    df_aux['Lazer Products'] = df_aux['Lazer Products'] + points
 
 for security in df[['Online Security','Online Backup','Device Protection']]:
     points = np.where(df[security].astype(str).str.contains('No'), 0, 1)
-    df_aux['Security'] = df_aux['Security'] + points
+    df_aux['Security Product'] = df_aux['Security Product'] + points
 
+# SENIOR VULNERABILITY FLAG
 df_aux['Senior Vulnerable'] = np.where((df_aux['Senior Citizen'] == 'Yes') & (df_aux['Tech Support'] == 'No'), 1, 0)
-df_aux['Family'] = np.where((df_aux['Partner'] == 'Yes') | (df_aux['Dependents'] == 'Yes'), 1, 0)
+
+# FAMILY AMOUNT CONTRACT FLAG
+df_aux['Family'] = (df_aux['Partner'] == 'Yes').astype(int) + (df_aux['Dependents'] == 'Yes').astype(int)
+
+# CLUSTERING GEOSPACES
+X_geo = df_aux[['Latitude','Longitude']]
+kmeans = KMeans(n_clusters=30, random_state=42)
+df_aux['Geo Cluster'] = kmeans.fit_predict(X_geo).astype(str)
+
+# PAYMENT RISK FLAG
+df_aux['Payment Risk'] = np.where((df_aux['Payment Method'] == 'Credit card (automatic)') 
+                                    | (df_aux['Payment Method'] == 'Bank transfer (automatic)'),
+                                        0, 1)
+
+# FEATURE REMAINING TIME CONTRACT 
+df_aux['Time Contract'] = df_aux['Contract'].apply(lambda x: 24 if x == 'Two year' else
+                                                             12 if x == 'One year' else  1).astype(int)
+
+# MEASURING MONTHS FOR CONTRACT RENEWAL 
+df_aux['Months to Renewal'] = df_aux['Time Contract'] - (df_aux['Tenure Months'] % df_aux['Time Contract'])
+
+# FINDING CONTRACT NEXT TO THE END
+df_aux['Last Three Months'] = np.where(df_aux['Time Contract'] <= 3, 1, 0)
+
+df['High Tech No Support'] = np.where((df['Internet Service'] == 'Fiber optic') & (df['Tech Support'] == 'No'), 1, 0)
+
+#%% [markdown]
+# ## -- JOINING DF_AUX WITH DF OFICIAL --
+#%%
+
+new_columns = df_aux.columns.difference(df.columns)
+df = df.join(df_aux[new_columns])
 
 #%% [markdown]
 # # --- UNDERSTANDING DATASET - EDA ---
@@ -156,7 +200,6 @@ df['Churn Score Range'] = df['Churn Score'].apply(lambda x: '00 to 10' if x <= 1
                                                             100
                                                             )
 
-#%%
 corr = df.corr(numeric_only=True, 
                 method='pearson')['Churn Value'].sort_values(ascending=False).to_frame()
 corr.columns = ['Correlation']
@@ -168,7 +211,6 @@ plt.title('Correlation Plot')
 plt.show()
 
 
-#%%
 # PLOTING CHURN DISTRIBUITION
 df['Churn Value'].value_counts(normalize=True)
 
@@ -187,7 +229,6 @@ num_cols = df.select_dtypes(include=['int','float'])
 
 cat_cols = [col for col in category_cols.columns if col in category_cols and col not in blacklist]
 num_cols = [col for col in df.columns if col in num_cols and col not in blacklist]
-#%%
 
 # CATEGORICAL COUNTPLOT
 plt.figure(figsize=(40, 36), dpi=350)
@@ -275,17 +316,6 @@ preprocessor = ColumnTransformer(
 )
 
 #%% [markdown]
-# # --- FINAL PIPE ---
-#%%
-
-final_pipe = Pipeline([
-    ('preprocessor', preprocessor),
-    ('model', KNeighborsClassifier())
-    ],
-    memory=None
-)
-
-#%% [markdown]
 # # --- DEFINING PARAMETERS ---
 #%%
 
@@ -293,49 +323,58 @@ params = [
     # --- MODEL 1: RandomForestClassifier: O mais lento ---
     {
     'model': [RandomForestClassifier(n_jobs=1, random_state=42, verbose=1 )],
-    'model__n_estimators': [150],
-    'model__max_depth': [6],
-    'model__class_weight': ['balanced'],
+    'model__n_estimators': [250],
+    'model__max_depth': [6, 10, None],
+    'model__class_weight': ['balanced', 'balanced_subsample'],
     'model__min_samples_leaf': [1]
     },
     # --- MODEL 2: LGBMClassifier: O mais veloz ---
     {
     'model': [LGBMClassifier(n_jobs=1, force_col_wise=True, random_state=42)],
-    'model__n_estimators': [75],
-    'model__learning_rate': [0.02],
-    'model__num_leaves': [35],
+    'model__n_estimators': [100, 300],
+    'model__learning_rate': [0.05, 0.1],
+    'model__num_leaves': [45],
     'model__max_depth': [-1],
     'model__class_weight': ['balanced'],
-    'model__min_child_samples': [1],
-    'model__subsample': [0.9],
-    'model__colsample_bytree': [ 0.9],
+    'model__min_child_samples': [20],
+    'model__subsample': [0.8],
+    'model__colsample_bytree': [ 0.8],
     'model__importance_type': ['gain'],
     'model__objective': ['binary']
     },
     # --- MODEL 3: XGBOOST: O mais robusto ---
     {
     'model': [XGBClassifier(n_jobs=1, force_col_wise=True, random_state=42)],
-    'model__n_estimators': [75],
-    'model__learning_rate': [0.02],
-    'model__max_depth': [2],
+    'model__n_estimators': [100, 200],
+    'model__learning_rate': [0.05, 0.1],
+    'model__max_depth': [3, 6],
     'model__scale_pos_weight': [1, 3],
-    'model__min_child_samples': [1],
-    'model__subsample': [0.9],
-    'model__colsample_bytree': [0.9],
+    'model__min_child_samples': [1, 5],
+    'model__subsample': [0.8],
+    'model__colsample_bytree': [0.8],
     'model__gamma': [0.1], # PENALITY MODEL FOR AVOID UNUSABLE LEAVES
-    'model__eval_metric': ['logloss']
+    'model__eval_metric': ['logloss'],
+    'model__gamma':[0, 0.1, 1]
     },
     # --- MODEL 4: CATBOOST: O que lida melhor com DataSet Majoritariamente categorico ---
     {
     'model': [CatBoostClassifier(allow_writing_files=False, verbose=1, random_state=42)],
     'model__n_estimators': [500, 1000],
-    'model__learning_rate': [0.05, 0.1],
-    'model__depth': [5, 7],
+    'model__learning_rate': [0.01, 0.05],
+    'model__depth': [4, 6],
     'model__auto_class_weights': ['Balanced'],
-    'model__l2_leaf_reg': [1, 3, 5],
-    'model__border_count': [32, 64]
+    'model__l2_leaf_reg': [3, 5],
+    'model__border_count': [128]
     }
 ]
+
+#%% [markdown]
+# # --- DEFINING PARAMETERS ---
+#%%
+
+model_pipe = Pipeline([
+    ('model', KNeighborsClassifier())
+])
 
 
 #%% [markdown]
@@ -345,29 +384,136 @@ params = [
 # CONFIGURATION GRIDSERACH PARAMS
 kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-grid = GridSearchCV(
-    final_pipe,
-    param_grid= params,
+grid = RandomizedSearchCV(
+    estimator=model_pipe,
+    param_distributions = params,
+    n_iter=40,
     cv = kfold,
     scoring='f1',
     verbose=1,
-    n_jobs=5
+    n_jobs=-1,
+    random_state=42,
+    refit = True
 )
 
+#%% [markdown]
+# # --- FINAL PIPE ---
+#%%
+
+final_pipe = Pipeline([
+    ('preprocessor', preprocessor),
+    ('model', grid)
+    ],
+    memory=None
+)
 #%% [markdown]
 # # --- FITTING GRID MODEL ---
 #%%
 
-# with mlflow.start_run() as r:
+with mlflow.start_run() as r:
 
-# mlflow.sklearn.autolog()
+    mlflow.sklearn.autolog()
 
-print("Fitting model!")
-model_fitted = grid.fit(X_train, y_train)
-print("Model fitted!")
-#%%
+    print("Fitting model!")
+    model_fitted = final_pipe.fit(X_train, y_train)
+    print("Model fitted!")
 
-# #%% [markdown]
+    print("Doing Data Predict!")
+    y_pred_model = model_fitted.predict(X_test)
+    y_pred_proba = model_fitted.predict_proba(X_test)[:, 1]
+    print("Predict Conclued!")
+
+    f1_score_metric = f1_score(y_test, y_pred_model)
+
+    print('='*40)
+    print(f1_score_metric)
+    print('='*40)
+
+
+    # 1. Converta Probabilidade para Classe (0 ou 1) usando um corte (threshold)
+    # Se a probabilidade for maior que 0.5, vira 1 (Churn), senão 0.
+    # Nota: Se 'proba_predicted_model' já for a classe predita, ignore essa linha.
+    if len(y_pred_proba.shape) > 1 and y_pred_proba.shape[1] > 1:
+        # Se for output do .predict_proba(), pegamos a coluna 1
+        y_pred = (y_pred_proba[:, 1] >= 0.5).astype(int)
+    else:
+        # Se for um array simples de probabilidades
+        y_pred = (y_pred_proba >= 0.5).astype(int)
+
+    # 2. Calcule o F1 (Note que mudei o nome da variável de resultado para 'f1_result')
+    f1_result = f1_score(y_test, y_pred)
+
+    print('='*40)
+    print(f"F1 Score: {f1_result}")
+
+    # 1. Relatório Detalhado (Obrigatório)
+    # Veja principalmente a linha do "1" (Churn)
+    print("--- Relatório de Classificação ---")
+    print(classification_report(y_test, y_pred_model))
+
+    # 2. Matriz de Confusão Visual
+    # Isso mostra: "Quantos clientes que saíram o modelo disse que ficariam?"
+    print("--- Matriz de Confusão ---")
+    ConfusionMatrixDisplay.from_predictions(y_test, y_pred_model, cmap='Blues')
+    plt.show()
+
+    # 3. Métrica de Qualidade da Probabilidade (ROC-AUC)
+    # Avalia a variável 'proba_predicted_model' que você calculou mas não usou
+    auc_score = roc_auc_score(y_test, y_pred_proba)
+    print(f"ROC-AUC Score: {auc_score:.4f}")
+    print(f'{model_fitted.best_estimator_.named_steps["model"]} \n'
+            f'{f1_score_metric}')
+
+    results_df = pd.DataFrame(model_fitted.cv_results_)
+
+    cols_keeped = ['params','mean_test_score','std_test_score','rank_test_score']
+    results_df = results_df[cols_keeped]
+
+
+    results_df = results_df.sort_values(by='rank_test_score')
+
+    print('Top 10 Melhores Modelos do Grid')
+    pd.set_option('display.max_colwidth', None)
+    display(results_df.head(10))
+
+
+    model = model_fitted.best_estimator_.named_steps['model']
+    importance = model.feature_importances_/100
+
+    preprocessor_steps = model_fitted.best_estimator_.named_steps['preprocessor']
+    features_names = preprocessor_steps.get_feature_names_out()
+
+    df_importance = pd.DataFrame({
+        'Feature': features_names,
+        'Importance': importance
+    }).sort_values(by='Importance', ascending=False)
+
+
+    plt.figure(figsize=(10, 8))
+    sns.barplot(data=df_importance.head(10), x='Importance', y='Feature', 
+                palette='viridis', hue = 'Feature', legend=False)
+    plt.title('Importância das Features (Random Forest)')
+    plt.show()
+
+
+    print(df_importance.head(10))
+
+    roc_test = roc_curve(y_test, y_pred_proba)
+
+    plt.figure(dpi=350)
+    plt.plot(roc_test[0], roc_test[1])
+    plt.legend('Teste')
+    plt.grid(True)
+    plt.title(f'Curva Roc')
+    plt.show()
+    plt.savefig('img/curva_roc.png')
+
+    # mlflow.log_metrics({'roc_test': roc_test})
+    mlflow.log_artifact('img/curva_roc.png')
+
+
+
+# %% [markdown]
 # # # --- TESTING STACKING MODELS ---
 # #%%
 
@@ -429,100 +575,100 @@ print("Model fitted!")
 #%% [markdown]
 # # --- PREDICTING VALUES WITH MODEL GRID ---
 #%%
-print("Doing Data Predict!")
-predicted_model = model_fitted.predict(X_test)
-proba_predicted_model = model_fitted.predict_proba(X_test)[:, 1]
-print("Predict Conclued!")
+# # print("Doing Data Predict!")
+# # predicted_model = model_fitted.predict(X_test)
+# # proba_predicted_model = model_fitted.predict_proba(X_test)[:, 1]
+# # print("Predict Conclued!")
 
-f1_score_metric = f1_score(y_test, predicted_model)
+# # f1_score_metric = f1_score(y_test, predicted_model)
 
-print('='*40)
-print(f1_score_metric)
-print('='*40)
+# # print('='*40)
+# # print(f1_score_metric)
+# # print('='*40)
 
 
-# 1. Converta Probabilidade para Classe (0 ou 1) usando um corte (threshold)
-# Se a probabilidade for maior que 0.5, vira 1 (Churn), senão 0.
-# Nota: Se 'proba_predicted_model' já for a classe predita, ignore essa linha.
-if len(proba_predicted_model.shape) > 1 and proba_predicted_model.shape[1] > 1:
-    # Se for output do .predict_proba(), pegamos a coluna 1
-    y_pred = (proba_predicted_model[:, 1] >= 0.5).astype(int)
-else:
-    # Se for um array simples de probabilidades
-    y_pred = (proba_predicted_model >= 0.5).astype(int)
+# # 1. Converta Probabilidade para Classe (0 ou 1) usando um corte (threshold)
+# # Se a probabilidade for maior que 0.5, vira 1 (Churn), senão 0.
+# # Nota: Se 'proba_predicted_model' já for a classe predita, ignore essa linha.
+# if len(proba_predicted_model.shape) > 1 and proba_predicted_model.shape[1] > 1:
+#     # Se for output do .predict_proba(), pegamos a coluna 1
+#     y_pred = (proba_predicted_model[:, 1] >= 0.5).astype(int)
+# else:
+#     # Se for um array simples de probabilidades
+#     y_pred = (proba_predicted_model >= 0.5).astype(int)
 
-# 2. Calcule o F1 (Note que mudei o nome da variável de resultado para 'f1_result')
-f1_result = f1_score(y_test, y_pred)
+# # 2. Calcule o F1 (Note que mudei o nome da variável de resultado para 'f1_result')
+# f1_result = f1_score(y_test, y_pred)
 
-print('='*40)
-print(f"F1 Score: {f1_result}")
+# print('='*40)
+# print(f"F1 Score: {f1_result}")
 
-# 1. Relatório Detalhado (Obrigatório)
-# Veja principalmente a linha do "1" (Churn)
-print("--- Relatório de Classificação ---")
-print(classification_report(y_test, predicted_model))
+# # 1. Relatório Detalhado (Obrigatório)
+# # Veja principalmente a linha do "1" (Churn)
+# print("--- Relatório de Classificação ---")
+# print(classification_report(y_test, predicted_model))
 
-# 2. Matriz de Confusão Visual
-# Isso mostra: "Quantos clientes que saíram o modelo disse que ficariam?"
-print("--- Matriz de Confusão ---")
-ConfusionMatrixDisplay.from_predictions(y_test, predicted_model, cmap='Blues')
-plt.show()
+# # 2. Matriz de Confusão Visual
+# # Isso mostra: "Quantos clientes que saíram o modelo disse que ficariam?"
+# print("--- Matriz de Confusão ---")
+# ConfusionMatrixDisplay.from_predictions(y_test, predicted_model, cmap='Blues')
+# plt.show()
 
-# 3. Métrica de Qualidade da Probabilidade (ROC-AUC)
-# Avalia a variável 'proba_predicted_model' que você calculou mas não usou
-auc_score = roc_auc_score(y_test, proba_predicted_model)
-print(f"ROC-AUC Score: {auc_score:.4f}")
-print(f'{model_fitted.best_estimator_.named_steps["model"]} \n'
-        f'{f1_score_metric}')
+# # 3. Métrica de Qualidade da Probabilidade (ROC-AUC)
+# # Avalia a variável 'proba_predicted_model' que você calculou mas não usou
+# auc_score = roc_auc_score(y_test, proba_predicted_model)
+# print(f"ROC-AUC Score: {auc_score:.4f}")
+# print(f'{model_fitted.best_estimator_.named_steps["model"]} \n'
+#         f'{f1_score_metric}')
 
 #%%
-# analisando os 10 melhores modelos
-results_df = pd.DataFrame(model_fitted.cv_results_)
+# # analisando os 10 melhores modelos
+# results_df = pd.DataFrame(model_fitted.cv_results_)
 
-cols_keeped = ['params','mean_test_score','std_test_score','rank_test_score']
-results_df = results_df[cols_keeped]
+# cols_keeped = ['params','mean_test_score','std_test_score','rank_test_score']
+# results_df = results_df[cols_keeped]
 
 
-results_df = results_df.sort_values(by='rank_test_score')
+# results_df = results_df.sort_values(by='rank_test_score')
 
-print('Top 10 Melhores Modelos do Grid')
-pd.set_option('display.max_colwidth', None)
-display(results_df.head(10))
+# print('Top 10 Melhores Modelos do Grid')
+# pd.set_option('display.max_colwidth', None)
+# display(results_df.head(10))
 
 #%% [markdown]
 # # --- COMPARING MODEL CLASSIFICATION VS Y_TEST ---
 #%%
 
-# names_num = num_vars
+# # names_num = num_vars
 
-# ohe_step = model_fitted.named_steps['preprocessor'].named_transformers_['tr_cat'].named_steps['onehot']
-# names_cat = ohe_step.get_feature_names_out(cat_vars)
+# # ohe_step = model_fitted.named_steps['preprocessor'].named_transformers_['tr_cat'].named_steps['onehot']
+# # names_cat = ohe_step.get_feature_names_out(cat_vars)
 
-# names_custom = ['Total Charges']
+# # names_custom = ['Total Charges']
 
-model = model_fitted.best_estimator_.named_steps['model']
-importance = model.feature_importances_/100
+# model = model_fitted.best_estimator_.named_steps['model']
+# importance = model.feature_importances_/100
 
-preprocessor_steps = model_fitted.best_estimator_.named_steps['preprocessor']
-features_names = preprocessor_steps.get_feature_names_out()
+# preprocessor_steps = model_fitted.best_estimator_.named_steps['preprocessor']
+# features_names = preprocessor_steps.get_feature_names_out()
 
-df_importance = pd.DataFrame({
-    'Feature': features_names,
-    'Importance': importance
-}).sort_values(by='Importance', ascending=False)
-
-
-
-plt.figure(figsize=(10, 8))
-sns.barplot(data=df_importance.head(10), x='Importance', y='Feature', 
-            palette='viridis', hue = 'Feature', legend=False)
-plt.title('Importância das Features (Random Forest)')
-plt.show()
+# df_importance = pd.DataFrame({
+#     'Feature': features_names,
+#     'Importance': importance
+# }).sort_values(by='Importance', ascending=False)
 
 
-print(df_importance.head(10))
 
-mlflow.log_metrics()
+# plt.figure(figsize=(10, 8))
+# sns.barplot(data=df_importance.head(10), x='Importance', y='Feature', 
+#             palette='viridis', hue = 'Feature', legend=False)
+# plt.title('Importância das Features (Random Forest)')
+# plt.show()
+
+
+# print(df_importance.head(10))
+
+# mlflow.log_metrics()
 
 #%% [markdown]
 # # --- ANALYSING MODEL METRICS ---
@@ -542,8 +688,18 @@ mlflow.log_metrics()
 #%% [markdown]
 # # --- LOADING MODEL PKL ---
 #%%
+versions = mlflow.search_model_versions(filter_string= "name = 'model_churn'")
+last_version = max([int(i.version) for i in versions])
+
+model = mlflow.sklearn.load_model(f'models:///model_churn/{last_version}')
+
+#%%
 
 
+
+#%%
+
+model.
 #%% [markdown]
 # ## --- PREDICTING WITH NEW VALUES ---
 #%%
