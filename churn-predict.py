@@ -15,7 +15,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from feature_engine import discretisation, encoding
 from sklearn.preprocessing import StandardScaler, RobustScaler, OneHotEncoder, OrdinalEncoder, TargetEncoder
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, roc_auc_score, roc_curve
+from sklearn import metrics
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import HistGradientBoostingClassifier, StackingClassifier, RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -25,8 +25,8 @@ from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 import mlflow
-
 from sklearn.cluster import KMeans
+
 
 sys.path.append(os.path.abspath(os.path.join('..')))
 from src.eng_funcs import CleanTransformStrNum, AnalyseDataSet
@@ -34,8 +34,8 @@ from src.eng_funcs import CleanTransformStrNum, AnalyseDataSet
 #%% [markdown]
 # ## -- CONFIGURING JUPYTER PAGE --
 #%%
-pd.set_option('display.max_columns', 50)
-pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
 
 mlflow.set_tracking_uri("http://localhost:5000")
 mlflow.set_experiment(experiment_id='1')
@@ -391,7 +391,7 @@ grid = RandomizedSearchCV(
     cv = kfold,
     scoring='f1',
     verbose=1,
-    n_jobs=-1,
+    n_jobs=10,
     random_state=42,
     refit = True
 )
@@ -402,274 +402,127 @@ grid = RandomizedSearchCV(
 
 final_pipe = Pipeline([
     ('preprocessor', preprocessor),
-    ('model', grid)
+    ('grid', grid)
     ],
     memory=None
 )
 #%% [markdown]
-# # --- FITTING GRID MODEL ---
+# # --- FITTING MODEL PIPELINE ---
 #%%
 
 with mlflow.start_run() as r:
 
+    # RUNNING MLFLOW LOG
     mlflow.sklearn.autolog()
 
+    # FITTING MODEL
     print("Fitting model!")
-    model_fitted = final_pipe.fit(X_train, y_train)
+    model_fit = final_pipe.fit(X_train, y_train)
     print("Model fitted!")
 
-    print("Doing Data Predict!")
-    y_pred_model = model_fitted.predict(X_test)
-    y_pred_proba = model_fitted.predict_proba(X_test)[:, 1]
-    print("Predict Conclued!")
+    # PREDICTING AND METRICS
+    print("Doing Train Predict!")
+    y_pred_train = model_fit.predict(X_train)
+    y_proba_train = model_fit.predict_proba(X_train)[:, 1]
+    roc_train_score = metrics.roc_auc_score(y_train, y_pred_train)
+    f1_score_train = metrics.f1_score(y_train, y_pred_train)
+    print("Train Predict Conclued!")
 
-    f1_score_metric = f1_score(y_test, y_pred_model)
+    print("Doing Test Predict!")
+    y_pred_test = model_fit.predict(X_test)
+    y_proba_test = model_fit.predict_proba(X_test)[:, 1]
+    roc_test_score = metrics.roc_auc_score(y_test, y_pred_test)
+    f1_score_test = metrics.f1_score(y_test, y_pred_test)
+    print("Test Predict Conclued!")
 
+    # PRINT METRICS
     print('='*40)
-    print(f1_score_metric)
+    print(f'AUC SCORE: {roc_test_score:.2f}')
+    print('='*40)
+    print(f'F1 SCORE: {f1_score_test:.2f}')
+    print('='*40)
+    print(f'BEST ESTIMATOR: {model_fit.named_steps["grid"].best_estimator_.named_steps["model"]}')
     print('='*40)
 
-
-    # 1. Converta Probabilidade para Classe (0 ou 1) usando um corte (threshold)
-    # Se a probabilidade for maior que 0.5, vira 1 (Churn), senão 0.
-    # Nota: Se 'proba_predicted_model' já for a classe predita, ignore essa linha.
-    if len(y_pred_proba.shape) > 1 and y_pred_proba.shape[1] > 1:
-        # Se for output do .predict_proba(), pegamos a coluna 1
-        y_pred = (y_pred_proba[:, 1] >= 0.5).astype(int)
+    # TRIYNG IMPROVE MODL WITH THRESHOLD VALUE
+    threshold = 0.5
+    if len(y_proba_test.shape) > 1 and y_proba_test.shape[1] > 1:
+        y_pred_threshold = (y_proba_test[:, 1] >= threshold).astype(int)
     else:
-        # Se for um array simples de probabilidades
-        y_pred = (y_pred_proba >= 0.5).astype(int)
-
-    # 2. Calcule o F1 (Note que mudei o nome da variável de resultado para 'f1_result')
-    f1_result = f1_score(y_test, y_pred)
-
+        y_pred_threshold = (y_proba_test >= threshold).astype(int)
+    f1_score_threshold = metrics.f1_score(y_test, y_pred_threshold)
+    
     print('='*40)
-    print(f"F1 Score: {f1_result}")
+    print(f"F1 Score: {f1_score_threshold}")
 
-    # 1. Relatório Detalhado (Obrigatório)
-    # Veja principalmente a linha do "1" (Churn)
+    # PRINTING CLASSIFICATION REPORT
     print("--- Relatório de Classificação ---")
-    print(classification_report(y_test, y_pred_model))
+    print(metrics.classification_report(y_test, y_pred_test))
 
-    # 2. Matriz de Confusão Visual
-    # Isso mostra: "Quantos clientes que saíram o modelo disse que ficariam?"
+    # PRINTING CONFUSION MATRIX
     print("--- Matriz de Confusão ---")
-    ConfusionMatrixDisplay.from_predictions(y_test, y_pred_model, cmap='Blues')
+    metrics.ConfusionMatrixDisplay.from_predictions(y_test, y_pred_test, cmap='Blues')
     plt.show()
 
-    # 3. Métrica de Qualidade da Probabilidade (ROC-AUC)
-    # Avalia a variável 'proba_predicted_model' que você calculou mas não usou
-    auc_score = roc_auc_score(y_test, y_pred_proba)
-    print(f"ROC-AUC Score: {auc_score:.4f}")
-    print(f'{model_fitted.best_estimator_.named_steps["model"]} \n'
-            f'{f1_score_metric}')
 
-    results_df = pd.DataFrame(model_fitted.cv_results_)
-
+    # TOP 10 BEST ESTIMATORS
     cols_keeped = ['params','mean_test_score','std_test_score','rank_test_score']
+    results_df = pd.DataFrame(model_fit.named_steps["grid"].cv_results_)
     results_df = results_df[cols_keeped]
-
-
     results_df = results_df.sort_values(by='rank_test_score')
-
     print('Top 10 Melhores Modelos do Grid')
     pd.set_option('display.max_colwidth', None)
-    display(results_df.head(10))
+    display(results_df.head(5))
 
 
-    model = model_fitted.best_estimator_.named_steps['model']
-    importance = model.feature_importances_/100
-
-    preprocessor_steps = model_fitted.best_estimator_.named_steps['preprocessor']
+    # DF FEATURE IMPORTANCE
+    best_model = model_fit.named_steps['grid'].best_estimator_.named_steps['model']
+    importance = best_model.feature_importances_/100
+    preprocessor_steps = model_fit.named_steps['preprocessor']
     features_names = preprocessor_steps.get_feature_names_out()
 
     df_importance = pd.DataFrame({
         'Feature': features_names,
         'Importance': importance
     }).sort_values(by='Importance', ascending=False)
-
-
+    
     plt.figure(figsize=(10, 8))
     sns.barplot(data=df_importance.head(10), x='Importance', y='Feature', 
                 palette='viridis', hue = 'Feature', legend=False)
-    plt.title('Importância das Features (Random Forest)')
+    plt.title(F'Importância das Features ({best_model})')
     plt.show()
-
-
     print(df_importance.head(10))
 
-    roc_test = roc_curve(y_test, y_pred_proba)
+    # PLOTING ROC CURVE AND F1 SCORE
+    roc_train = metrics.roc_curve(y_train, y_proba_train)
+    roc_test = metrics.roc_curve(y_test, y_proba_test)
+
 
     plt.figure(dpi=350)
+    plt.plot(roc_train[0], roc_train[1])
     plt.plot(roc_test[0], roc_test[1])
-    plt.legend('Teste')
+    plt.legend([f"Treino: {roc_train_score:.2f}",
+               f"Teste: {roc_test_score:.2f}"])
+    plt.plot([0,1],[0,1], '--', color='black')
     plt.grid(True)
     plt.title(f'Curva Roc')
     plt.show()
     plt.savefig('img/curva_roc.png')
 
-    # mlflow.log_metrics({'roc_test': roc_test})
     mlflow.log_artifact('img/curva_roc.png')
+    mlflow.log_metrics({
+        "auc_train": roc_train_score,
+        "auc_test": roc_test_score,
+        "f1_train": f1_score_train,
+        "f1_test": f1_score_test,
+        "f1 threshold": f1_score_threshold,
+        })  # type: ignore
+    
 
-
-
-# %% [markdown]
-# # # --- TESTING STACKING MODELS ---
-# #%%
-
-# # TAKING BEST RANDOM FOREST MODEL
-# best_rf_model = model_fitted.best_estimator_.named_steps['model']
-
-
-# # CONFIGURING GREAT XGBOOST AND LGBM
-# best_lgbm = LGBMClassifier(
-#     n_estimators=2000,
-#     learning_rate=0.04,
-#     num_leaves=50,
-#     class_weight='balanced',
-#     random_state=42,
-#     force_col_wise = True ,
-#     n_jobs=1
-# )
-
-# best_xgb = XGBClassifier(
-#     n_estimators = 1200,
-#     learning_rate = 0.04,
-#     max_depth = 5,
-#     scale_pos_weight = 3,
-#     random_state=42,
-#     eval_metric='logloss',
-#     n_jobs = 1
-# )
-# #%% [markdown]
-# # ## -- STACKING MODELS --
-# #%%
-# estimators = [
-#     ('rf', best_rf_model),
-#     ('lgbm', best_lgbm),
-#     ('xgb', best_xgb)
-# ]
-
-# stacking_model = StackingClassifier(
-#     estimators=estimators,
-#     final_estimator=LogisticRegression(),
-#     cv=5,
-#     n_jobs=5
-# )
-
-# final_stack_pipe = Pipeline([
-#     ('preprocessor', preprocessor),
-#     ('model', stacking_model)
-# ])
-
-# #%%
-
-# print('Treinando Stacking Model')
-# final_stack_pipe.fit(X_train, y_train)
-
-# print('Predict Stacking Model')
-# y_pred_stack = final_stack_pipe.predict(X_test)
-
-
-# print(classification_report(y_test, y_pred_stack))
-#%% [markdown]
-# # --- PREDICTING VALUES WITH MODEL GRID ---
-#%%
-# # print("Doing Data Predict!")
-# # predicted_model = model_fitted.predict(X_test)
-# # proba_predicted_model = model_fitted.predict_proba(X_test)[:, 1]
-# # print("Predict Conclued!")
-
-# # f1_score_metric = f1_score(y_test, predicted_model)
-
-# # print('='*40)
-# # print(f1_score_metric)
-# # print('='*40)
-
-
-# # 1. Converta Probabilidade para Classe (0 ou 1) usando um corte (threshold)
-# # Se a probabilidade for maior que 0.5, vira 1 (Churn), senão 0.
-# # Nota: Se 'proba_predicted_model' já for a classe predita, ignore essa linha.
-# if len(proba_predicted_model.shape) > 1 and proba_predicted_model.shape[1] > 1:
-#     # Se for output do .predict_proba(), pegamos a coluna 1
-#     y_pred = (proba_predicted_model[:, 1] >= 0.5).astype(int)
-# else:
-#     # Se for um array simples de probabilidades
-#     y_pred = (proba_predicted_model >= 0.5).astype(int)
-
-# # 2. Calcule o F1 (Note que mudei o nome da variável de resultado para 'f1_result')
-# f1_result = f1_score(y_test, y_pred)
-
-# print('='*40)
-# print(f"F1 Score: {f1_result}")
-
-# # 1. Relatório Detalhado (Obrigatório)
-# # Veja principalmente a linha do "1" (Churn)
-# print("--- Relatório de Classificação ---")
-# print(classification_report(y_test, predicted_model))
-
-# # 2. Matriz de Confusão Visual
-# # Isso mostra: "Quantos clientes que saíram o modelo disse que ficariam?"
-# print("--- Matriz de Confusão ---")
-# ConfusionMatrixDisplay.from_predictions(y_test, predicted_model, cmap='Blues')
-# plt.show()
-
-# # 3. Métrica de Qualidade da Probabilidade (ROC-AUC)
-# # Avalia a variável 'proba_predicted_model' que você calculou mas não usou
-# auc_score = roc_auc_score(y_test, proba_predicted_model)
-# print(f"ROC-AUC Score: {auc_score:.4f}")
-# print(f'{model_fitted.best_estimator_.named_steps["model"]} \n'
-#         f'{f1_score_metric}')
-
-#%%
-# # analisando os 10 melhores modelos
-# results_df = pd.DataFrame(model_fitted.cv_results_)
-
-# cols_keeped = ['params','mean_test_score','std_test_score','rank_test_score']
-# results_df = results_df[cols_keeped]
-
-
-# results_df = results_df.sort_values(by='rank_test_score')
-
-# print('Top 10 Melhores Modelos do Grid')
-# pd.set_option('display.max_colwidth', None)
-# display(results_df.head(10))
-
-#%% [markdown]
-# # --- COMPARING MODEL CLASSIFICATION VS Y_TEST ---
-#%%
-
-# # names_num = num_vars
-
-# # ohe_step = model_fitted.named_steps['preprocessor'].named_transformers_['tr_cat'].named_steps['onehot']
-# # names_cat = ohe_step.get_feature_names_out(cat_vars)
-
-# # names_custom = ['Total Charges']
-
-# model = model_fitted.best_estimator_.named_steps['model']
-# importance = model.feature_importances_/100
-
-# preprocessor_steps = model_fitted.best_estimator_.named_steps['preprocessor']
-# features_names = preprocessor_steps.get_feature_names_out()
-
-# df_importance = pd.DataFrame({
-#     'Feature': features_names,
-#     'Importance': importance
-# }).sort_values(by='Importance', ascending=False)
-
-
-
-# plt.figure(figsize=(10, 8))
-# sns.barplot(data=df_importance.head(10), x='Importance', y='Feature', 
-#             palette='viridis', hue = 'Feature', legend=False)
-# plt.title('Importância das Features (Random Forest)')
-# plt.show()
-
-
-# print(df_importance.head(10))
-
-# mlflow.log_metrics()
-
+    model_name = best_model.__class__.__name__
+    mlflow.set_tag("winner_algorithm", model_name)
+    mlflow.sklearn.log_model(final_pipe, name='churn_pipeline_completo')
+    
 #%% [markdown]
 # # --- ANALYSING MODEL METRICS ---
 #%%
