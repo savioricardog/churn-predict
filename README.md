@@ -1,4 +1,4 @@
-# 🚜 Classificação de Clientes que darão Churn (LightGBM + Learning Rate + Class_Weight)
+# 🚜 Classificação de Clientes que darão Churn (Catboost)
 
 ## 📋 Sobre o Projeto
 Este projeto resolve um problema muito comum em toda e qualquer empresa: Churn de clientes.
@@ -12,9 +12,9 @@ Clientes mais propensos a churn utilizam menos produtos que clientes menos prope
 ## 🧠 Estratégia de Modelagem
 
 ### 1. Algoritmo e Paramêtro
-Utilizei o **LightGBM Classifier** com a função objetivo **Learning Rate** (`0.01`) e **Class_Weight** (`balanced`).
-* **Por que Learning Rate e Class_Weight?** Por que no caso de análise de fraudes o mais díficil é entender a especifidades dos padrôes fraudulentos, e neste caso, a melhor solução é fazer que o 
-modelo se atende a todo e qualquer detalhe no treinamento, fazendo com que o modelo não passe por uma especificidade de fraude sem detecta-lá. Em conjunto com ele, o paramêtro class_weight ajuda muito dizendo para o modelo dar mais enfoque na classe minoritária (aumenta o peso da classe fraude).
+Utilizei o **Catboost Classifier** com a função hiperparametros como **Learning Rate** (`0.01`) e **Class_Weight** (`balanced`).
+* **Por que o Catboost venceu XGB, LGBM e RF?** Geralmente modelos boosting (XGB E LGBM) se sobressaem em analises preditivas, porém neste case, o Catboost se sobressaiu por conta de uma catecteristica que ele possui. Trato com variáveis categoricas. Por conta deste dataset ser majoritariamente formado por variáveis categóricas, ele acaba sendo o tipo de base perfeita para o Catboost performar, que foi o que ocorreu nessa rodada de treinos.
+* **Por que Learning Rate e Class_Weight?** Por que no caso de análise de churns o mais díficil é aprender o padrão de comportamento numa base tão desbalanceada, e neste caso, a melhor solução é fazer que o modelo se atende a todo e qualquer detalhe no treinamento, fazendo com que o modelo não passe por um comportamento ou indicio de possível churn sem detecta-lá. Em conjunto com ele, o paramêtro class_weight ajuda muito dizendo para o modelo dar mais enfoque na classe minoritária (aumenta o peso da classe churn e ajuda o modelo a "ter medo" de perder possíveis clientes churners).
 
 ### 2. Engenharia de Features
 A estrutura de dados foi construída com `Scikit-Learn` incluindo:
