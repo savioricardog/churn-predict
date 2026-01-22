@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold, RandomizedSearchCV
 from sklearn.feature_selection import SelectKBest, chi2
+from sklearn.calibration import calibration_curve, CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from feature_engine import discretisation, encoding
@@ -24,7 +25,9 @@ import joblib
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
+from sklearn.frozen import FrozenEstimator
 import mlflow
+from mlflow.models.signature import infer_signature
 from sklearn.cluster import KMeans
 
 
@@ -323,20 +326,20 @@ params = [
     # --- MODEL 1: RandomForestClassifier: O mais lento ---
     {
     'model': [RandomForestClassifier(n_jobs=1, random_state=42, verbose=1 )],
-    'model__n_estimators': [250],
-    'model__max_depth': [6, 10, None],
-    'model__class_weight': ['balanced', 'balanced_subsample'],
-    'model__min_samples_leaf': [1]
+    'model__n_estimators': [250, 500, 750],
+    'model__max_depth': [3,6, 10, None],
+    'model__class_weight': ['balanced', 'balanced_subsample', None],
+    'model__min_samples_leaf': [1, 3]
     },
     # --- MODEL 2: LGBMClassifier: O mais veloz ---
     {
     'model': [LGBMClassifier(n_jobs=1, force_col_wise=True, random_state=42)],
-    'model__n_estimators': [100, 300],
-    'model__learning_rate': [0.05, 0.1],
-    'model__num_leaves': [45],
+    'model__n_estimators': [600, 1000, 2000],
+    'model__learning_rate': [0.01, 0.05, 0.1, 0.3],
+    'model__num_leaves': [45, 75, 100],
     'model__max_depth': [-1],
-    'model__class_weight': ['balanced'],
-    'model__min_child_samples': [20],
+    'model__class_weight': ['balanced', None],
+    'model__min_child_samples': [4, 12, 20],
     'model__subsample': [0.8],
     'model__colsample_bytree': [ 0.8],
     'model__importance_type': ['gain'],
@@ -345,11 +348,11 @@ params = [
     # --- MODEL 3: XGBOOST: O mais robusto ---
     {
     'model': [XGBClassifier(n_jobs=1, force_col_wise=True, random_state=42)],
-    'model__n_estimators': [100, 200],
-    'model__learning_rate': [0.05, 0.1],
-    'model__max_depth': [3, 6],
-    'model__scale_pos_weight': [1, 3],
-    'model__min_child_samples': [1, 5],
+    'model__n_estimators': [200, 500, 900],
+    'model__learning_rate': [0.01, 0.05, 0.1, 0.3],
+    'model__max_depth': [3, 6, 8],
+    'model__scale_pos_weight': [1, 3, 5, None],
+    'model__min_child_samples': [1, 3, 8],
     'model__subsample': [0.8],
     'model__colsample_bytree': [0.8],
     'model__gamma': [0.1], # PENALITY MODEL FOR AVOID UNUSABLE LEAVES
@@ -359,11 +362,11 @@ params = [
     # --- MODEL 4: CATBOOST: O que lida melhor com DataSet Majoritariamente categorico ---
     {
     'model': [CatBoostClassifier(allow_writing_files=False, verbose=1, random_state=42)],
-    'model__n_estimators': [500, 1000],
-    'model__learning_rate': [0.01, 0.05],
-    'model__depth': [4, 6],
-    'model__auto_class_weights': ['Balanced'],
-    'model__l2_leaf_reg': [3, 5],
+    'model__n_estimators': [500, 1000, 1500],
+    'model__learning_rate': [0.01, 0.05, 0.1, 0.3],
+    'model__depth': [4, 6, 9],
+    'model__auto_class_weights': ['Balanced', None],
+    'model__l2_leaf_reg': [3, 5, 7],
     'model__border_count': [128]
     }
 ]
@@ -406,6 +409,7 @@ final_pipe = Pipeline([
     ],
     memory=None
 )
+
 #%% [markdown]
 # # --- FITTING MODEL PIPELINE ---
 #%%
@@ -426,6 +430,7 @@ with mlflow.start_run() as r:
     y_proba_train = model_fit.predict_proba(X_train)[:, 1]
     roc_train_score = metrics.roc_auc_score(y_train, y_pred_train)
     f1_score_train = metrics.f1_score(y_train, y_pred_train)
+    prauc_score_train = metrics.average_precision_score(y_train, y_pred_train)
     print("Train Predict Conclued!")
 
     print("Doing Test Predict!")
@@ -433,7 +438,11 @@ with mlflow.start_run() as r:
     y_proba_test = model_fit.predict_proba(X_test)[:, 1]
     roc_test_score = metrics.roc_auc_score(y_test, y_pred_test)
     f1_score_test = metrics.f1_score(y_test, y_pred_test)
+    prauc_score_test = metrics.average_precision_score(y_test, y_pred_test)
     print("Test Predict Conclued!")
+
+    best_model = model_fit.named_steps['grid'].best_estimator_.named_steps['model']
+    model_name = best_model.__class__.__name__
 
     # PRINT METRICS
     print('='*40)
@@ -441,7 +450,7 @@ with mlflow.start_run() as r:
     print('='*40)
     print(f'F1 SCORE: {f1_score_test:.2f}')
     print('='*40)
-    print(f'BEST ESTIMATOR: {model_fit.named_steps["grid"].best_estimator_.named_steps["model"]}')
+    print(f'BEST ESTIMATOR: {model_name}')
     print('='*40)
 
     # TRIYNG IMPROVE MODL WITH THRESHOLD VALUE
@@ -476,7 +485,6 @@ with mlflow.start_run() as r:
 
 
     # DF FEATURE IMPORTANCE
-    best_model = model_fit.named_steps['grid'].best_estimator_.named_steps['model']
     importance = best_model.feature_importances_/100
     preprocessor_steps = model_fit.named_steps['preprocessor']
     features_names = preprocessor_steps.get_feature_names_out()
@@ -508,51 +516,118 @@ with mlflow.start_run() as r:
     plt.title(f'Curva Roc')
     plt.show()
     plt.savefig('img/curva_roc.png')
-
     mlflow.log_artifact('img/curva_roc.png')
+
+    # TESTING CALIBRATION CURVE FOR UNDERSTAND BETTER THRESHOLD
+    prob_true, prob_pred = calibration_curve(y_test, y_proba_test, n_bins=10, strategy='uniform')
+
+    plt.figure(figsize=(8,8))
+    plt.plot(prob_pred, prob_true, marker='o', linewidth=2, label=model_name)
+    plt.plot([0,1], [0,1], linestyle='--', color='gray', label='Perfeitamente Calibrado')
+    plt.ylabel('Fração de positivos reais (A realidade)')
+    plt.xlabel('Probabilidade preditiva (o que o modelo acha)')
+    plt.title('Curva de calibração')
+    plt.legend()
+    plt.show()
+
+    X_calib, X_val, y_calib, y_val = train_test_split(X_test, y_test,
+                                                    test_size=0.5, 
+                                                    random_state=42, 
+                                                    stratify=y_test
+    )
+    model_calibrate = final_pipe
+    final_model = CalibratedClassifierCV(FrozenEstimator(model_calibrate), method='sigmoid')
+    final_model.fit(X_calib, y_calib)
+    prob_val_calibrated = final_model.predict_proba(X_val)[:, 1]
+    y_true_val, y_prob_val = calibration_curve(y_val, prob_val_calibrated, n_bins=10)
+    y_true_test, y_prob_test = calibration_curve(y_test, y_proba_test, n_bins=10)
+
+    plt.figure(figsize=(10,10))
+    plt.plot(y_prob_val, y_true_val, marker='s', label='Calibrado (Isotonic)', color='green')
+    plt.plot(y_prob_test, y_true_test, marker='o', label='Original (Catboost)', color='red')
+    plt.plot([0,1], [0,1], linestyle='--', color='gray', label='Perfeitamente Calibrado')
+    plt.title('Calibrados: Antes (Exagerado) vs Depois (Realista)')
+    plt.xlabel('Probabilidade predita')
+    plt.ylabel('Fração real de positivos')
+    plt.legend()
+    plt.show()
+    plt.savefig('img/calibration_curve.png')
+    mlflow.log_artifact('img/calibration_curve.png')
+
+    # FINDING BEST THRESHOLD FOR MODEL
+    thresholds = np.arange(0.1, 0.9, 0.1)
+    f1_scores = []
+    precisions = []
+    recalls = []
+    auc_scores = []
+
+    for t in thresholds:
+        preds = (prob_val_calibrated >= t).astype(int)
+
+        f1_scores.append(metrics.f1_score(y_val, preds))
+        precisions.append(metrics.precision_score(y_val, preds, zero_division=0))
+        recalls.append(metrics.recall_score(y_val, preds))
+        auc_scores.append(metrics.roc_auc_score(y_val, preds))
+
+    best_thresh = np.argmax(f1_scores)
+    best_t = thresholds[best_thresh]
+    best_f1 = f1_scores[best_thresh]
+    best_precision = precisions[best_thresh]
+    best_recall = recalls[best_thresh]
+    best_roc_auc = auc_scores[best_thresh]
+
+
+    # PRINTING METRICS WITH THRESHOLD
+    print(f'💰 Resultado FINAL PROD')
+    print('='*40)
+    print(f'🎯 Threshold ótimo: {best_t:.2f}')
+    print(f'🏆 Melhor F1-Score: {best_f1:.4f}')
+    print(f'✅ Melhor Precision-Score: {best_precision:.4f} (de cada 100 ligações, acertamos {int(best_precision*100)})')
+    print(f'🎣 Melhor Recall-Score: {best_recall:.4f} (Recuperamos {int(best_recall*100)}% dos churners)')
+    print(f'🎖️ Melhor ROC AUC-Score: {best_roc_auc:.4f}')
+
+    # DEFINING SIGNATURE MODEL
+    input_sample = X_val.iloc[:5].copy().reset_index(drop=True)
+    prediction_sample = final_model.predict(input_sample)
+
+    signature = infer_signature(input_sample, prediction_sample)
+
+    # SAVING FINAL MODEL INFOS
+    mlflow.set_tag("winner_algorithm", model_name)
+    mlflow.sklearn.log_model(
+        sk_model=final_model,
+        name='churn_model_calibrated_prod',
+        signature=signature,
+        input_example=input_sample,
+        pip_requirements=['catboost','scikit-learn','pandas','numpy']
+    )
+
+    # SAVING FINAL MODEL METRICS
     mlflow.log_metrics({
         "auc_train": roc_train_score,
         "auc_test": roc_test_score,
         "f1_train": f1_score_train,
         "f1_test": f1_score_test,
         "f1 threshold": f1_score_threshold,
-        })  # type: ignore
-    
+        "prauc_train": prauc_score_train,
+        "prauc_test": prauc_score_test,
+        "f1_val": best_f1,
+        "precision_val": best_precision,
+        "recall_val": best_recall,
+        "auc_val": best_roc_auc
+    })  # type: ignore
 
-    model_name = best_model.__class__.__name__
-    mlflow.set_tag("winner_algorithm", model_name)
-    mlflow.sklearn.log_model(final_pipe, name='churn_pipeline_completo')
-    
-#%% [markdown]
-# # --- ANALYSING MODEL METRICS ---
-#%%
-
-
-#%% [markdown]
-# ## --- PLOTTING MODEL METRICS RESULTS ---
-#%%
+    print("✅ Conclued!")
 
 
 #%% [markdown]
-# # --- SAVING PKL MODEL ---
-#%%
-
-
-#%% [markdown]
-# # --- LOADING MODEL PKL ---
+# # --- LOADING MODEL ---
 #%%
 versions = mlflow.search_model_versions(filter_string= "name = 'model_churn'")
 last_version = max([int(i.version) for i in versions])
 
 model = mlflow.sklearn.load_model(f'models:///model_churn/{last_version}')
 
-#%%
-
-
-
-#%%
-
-model.
 #%% [markdown]
 # ## --- PREDICTING WITH NEW VALUES ---
 #%%
