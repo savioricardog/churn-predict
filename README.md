@@ -18,28 +18,56 @@ Utilizei o **Catboost Classifier** com a função hiperparametros como **Learnin
 
 ### 2. Engenharia de Features
 A estrutura de dados foi construída com `Scikit-Learn` incluindo:
-* **Escalonamento:** Escalonamento do montante e do tempo para menores escalas.
+* **Scaling:** do **"Total Charges"** e das features numéricas para menores escalas.
+* **Imputer:** da mediana em features numéricas com missings e valores constantes em features categóricas.
+* **Enconding:** em features catégoricas.
+* **Limpeza e Transformação:** na feature **"Total Charges"** por conta de registro de espaço na coluna.
 
 
-## 📊 Resultados (Test Validation)
+## 📊 Resultados (Test Validation Pré Threshold)
 
 | Métricas | Valor Final |
 |----------|-------------|
-| **Precision** | **92%** (Assertividade percentual dos apontamentos de fraude) |
+| **Threshold** | **0.50** (Calibrador de probabilidades) |
+| **Precision** | **54%** (Assertividade percentual dos apontamentos de fraude) |
 | **Recall**    | **81%** (Capacidade de detecção) |
-| **F1-Score**  | **86%** (Equilíbrio entre Precision x Recall) |
+| **F1-Score**  | **65%** (Equilíbrio entre Precision x Recall) |
+| **ROC AUC**   | **78%** (Capacidade de separação entre Churn e Não churn) |
 
-### Performance: Matrix de Confusão
-> *O gráfico de matrix de confusão abaixo mostra como se comportou o modelo durante o teste,
-entregando um resultado máximo de **24** fraudes não detectadas*
 
-![Matrix de Confusão](img/confusion_matrix_LIGHT.png)
+### Performance Test: Curva de Calibração
+> *O gráfico linha abaixo mostra como se comportou o modelo durante o teste, e sua performance de calibração comparada ao modelo perfeito*
 
-### Performance Financeira
+![Curva de Calibração](img/calibration_curve_test.png)
+
+### Performance Financeira Test
 > *O gráfico de barras abaixo mostra o resultado financeiro do modelo.
 Entregando um valor de **$9.000** dolares de prejuizo evitados, que equivalem a **70%** do total das tentativas de fraude*
 
-![Resultado Financeiro](img/financial_model_impact.png)
+![Resultado Financeiro Test](img/business_profit_curve_test.png)
+
+## 📊 Resultados (Test Validation w/ Threshold)
+
+| Métricas | Valor Final |
+|----------|-------------|
+| **Threshold** | **0.40** (Calibrador de probabilidades) |
+| **Precision** | **70%** (Assertividade percentual dos apontamentos de fraude) |
+| **Recall**    | **60%** (Capacidade de detecção) |
+| **F1-Score**  | **65%** (Equilíbrio entre Precision x Recall) |
+| **ROC AUC**   | **80%** (Capacidade de separação entre Churn e Não churn) |
+
+
+### Performance Calibrada: Curva de Calibração
+> *O gráfico linha abaixo mostra como se comportou o modelo durante a validação com o threshold perfeito definido, e sua performance de calibração comparada ao modelo de teste e o modelo perfeito*
+
+![Curva de Calibração Final](img/calibration_curve_val.png)
+
+### Performance Financeira Calibrada
+> *O gráfico de barras abaixo mostra o resultado financeiro do modelo calibrado.
+Entregando um valor de **$14.000** dolares de prejuizo evitados, que equivalem a **X%** do total de churns ocorridos*
+
+![Resultado Financeiro Calibrada](img/business_profit_curve_final.png)
+
 
 
 ## 🚀 Como Rodar o Projeto
