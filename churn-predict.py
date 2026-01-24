@@ -167,121 +167,115 @@ df_aux['Social Isolation'] = (df_aux['Family'].astype(int) + df_aux['Senior Vuln
 
 new_columns = df_aux.columns.difference(df.columns)
 df = df.join(df_aux[new_columns])
-
-#%%
-
 df.head(3)
+
+#%% [markdown]
+# # --- UNDERSTANDING DATASET - EDA ---
+#%% [markdown]
+# ## -- DATASET GENERAL INFOS --
 #%%
-print(list(df.columns))
+print(df.info())
+print(f'\n Shape df: {df.shape}')
 
-# #%% [markdown]
-# # # --- UNDERSTANDING DATASET - EDA ---
-# #%% [markdown]
-# # ## -- DATASET GENERAL INFOS --
-# #%%
-# print(df.info())
-# print(f'\n Shape df: {df.shape}')
+# DESCRIBING DATASET
+df.describe().T
 
-# # DESCRIBING DATASET
-# df.describe().T
+#%% [markdown]
+# ## -- ANALISING DATASET VALUES (IF HAS FALSE NULL VALUES OR TRUE NULL VALUES) --
+#%%
+# FUNCTION CREATED FOR ANALYSE DATASET
+AnalyseDataSet(df)
 
-# #%% [markdown]
-# # ## -- ANALISING DATASET VALUES (IF HAS FALSE NULL VALUES OR TRUE NULL VALUES) --
-# #%%
-# # FUNCTION CREATED FOR ANALYSE DATASET
-# AnalyseDataSet(df)
+#%% [markdown]
+# ## -- CREATING RANGE COLUMNS FOR BETTER UNDERSTAND --
+# CREATING TENURE MONTHS RANGE
+df['Tenure Months Range'] = df['Tenure Months'].apply(lambda x: '00 to 05' if x <= 5 else
+                                                                '06 to 10' if x <= 10 else 
+                                                                '11 to 15' if x <= 15 else
+                                                                '16 to 20' if x <= 20 else
+                                                                '21 to 25' if x <= 25 else
+                                                                '26 to 30' if x <= 30 else
+                                                                '31 to 35' if x <= 35 else
+                                                                '36 to 40' if x <= 40 else
+                                                                '41 to 45' if x <= 45 else
+                                                                '46 to 50' if x <= 50 else
+                                                                '51 to 55' if x <= 55 else
+                                                                '56 to 60' if x <= 60 else
+                                                                '61 to 65' if x <= 65 else
+                                                                '66 to 70' if x <= 70 else
+                                                                '71 to 75' if x <= 75 else
+                                                                '76 to 80' if x <= 80 else
+                                                                '81 to 85' if x <= 85 else
+                                                                '86 to 90' if x <= 90 else
+                                                                '91 to 95' if x <= 95 else
+                                                                '96 to 100')
 
-# #%% [markdown]
-# # ## -- CREATING RANGE COLUMNS FOR BETTER UNDERSTAND --
-# # CREATING TENURE MONTHS RANGE
-# df['Tenure Months Range'] = df['Tenure Months'].apply(lambda x: '00 to 05' if x <= 5 else
-#                                                                 '06 to 10' if x <= 10 else 
-#                                                                 '11 to 15' if x <= 15 else
-#                                                                 '16 to 20' if x <= 20 else
-#                                                                 '21 to 25' if x <= 25 else
-#                                                                 '26 to 30' if x <= 30 else
-#                                                                 '31 to 35' if x <= 35 else
-#                                                                 '36 to 40' if x <= 40 else
-#                                                                 '41 to 45' if x <= 45 else
-#                                                                 '46 to 50' if x <= 50 else
-#                                                                 '51 to 55' if x <= 55 else
-#                                                                 '56 to 60' if x <= 60 else
-#                                                                 '61 to 65' if x <= 65 else
-#                                                                 '66 to 70' if x <= 70 else
-#                                                                 '71 to 75' if x <= 75 else
-#                                                                 '76 to 80' if x <= 80 else
-#                                                                 '81 to 85' if x <= 85 else
-#                                                                 '86 to 90' if x <= 90 else
-#                                                                 '91 to 95' if x <= 95 else
-#                                                                 '96 to 100')
+df['Tenure Months Range'].value_counts().sort_values(ascending=False)
 
-# df['Tenure Months Range'].value_counts().sort_values(ascending=False)
+df['Churn Score Range'] = df['Churn Score'].apply(lambda x: '00 to 10' if x <= 10 else
+                                                            '11 to 20' if x <= 20 else 
+                                                            '21 to 30' if x <= 30 else
+                                                            '31 to 40' if x <= 40 else
+                                                            '41 to 50' if x <= 50 else
+                                                            '51 to 60' if x <= 60 else
+                                                            '61 to 70' if x <= 70 else
+                                                            '71 to 80' if x <= 80 else
+                                                            '81 to 90' if x <= 90 else
+                                                            100
+                                                            )
 
-# df['Churn Score Range'] = df['Churn Score'].apply(lambda x: '00 to 10' if x <= 10 else
-#                                                             '11 to 20' if x <= 20 else 
-#                                                             '21 to 30' if x <= 30 else
-#                                                             '31 to 40' if x <= 40 else
-#                                                             '41 to 50' if x <= 50 else
-#                                                             '51 to 60' if x <= 60 else
-#                                                             '61 to 70' if x <= 70 else
-#                                                             '71 to 80' if x <= 80 else
-#                                                             '81 to 90' if x <= 90 else
-#                                                             100
-#                                                             )
+corr = df.corr(numeric_only=True, 
+                method='pearson')['Churn Value'].sort_values(ascending=False).to_frame()
+corr.columns = ['Correlation']
+mask = np.triu(np.ones_like(corr, dtype=bool))
 
-# corr = df.corr(numeric_only=True, 
-#                 method='pearson')['Churn Value'].sort_values(ascending=False).to_frame()
-# corr.columns = ['Correlation']
-# mask = np.triu(np.ones_like(corr, dtype=bool))
-
-# plt.figure(figsize=(10,6))
-# sns.heatmap(data=corr, cmap='coolwarm', fmt='.2f', annot=True, mask=mask)
-# plt.title('Correlation Plot')
-# plt.show()
+plt.figure(figsize=(10,6))
+sns.heatmap(data=corr, cmap='coolwarm', fmt='.2f', annot=True, mask=mask)
+plt.title('Correlation Plot')
+plt.show()
 
 
-# # PLOTING CHURN DISTRIBUITION
-# df['Churn Value'].value_counts(normalize=True)
+# PLOTING CHURN DISTRIBUITION
+df['Churn Value'].value_counts(normalize=True)
 
-# plt.figure(figsize=(10,6))
-# sns.countplot(data=df, x='Churn Value', palette='viridis')
-# plt.title('Distribuição de Valores de Churn (1=Saiu, 0=Ficou)')
-# plt.show()
+plt.figure(figsize=(10,6))
+sns.countplot(data=df, x='Churn Value', palette='viridis')
+plt.title('Churn Value Distribution (1=Out, 0=Stay)')
+plt.show()
 
-# #%%
-# # LIST COLUMN TYPES
-# blacklist = ['CustomerID','City','Lat Long','Churn Label', 'Monthly Charges','Zip Code',
-#              'Latitude','Longitude','CLTV','Churn Score',
-#              'Total Charges', 'Tenure Months']
-# category_cols = df.select_dtypes(include=['object'])
-# num_cols = df.select_dtypes(include=['int','float'])
+#%%
+# LIST COLUMN TYPES
+blacklist = ['CustomerID','City','Lat Long','Churn Label', 'Monthly Charges','Zip Code',
+             'Latitude','Longitude','CLTV','Churn Score',
+             'Total Charges', 'Tenure Months']
+category_cols = df.select_dtypes(include=['object'])
+num_cols = df.select_dtypes(include=['int','float'])
 
-# cat_cols = [col for col in category_cols.columns if col in category_cols and col not in blacklist]
-# num_cols = [col for col in df.columns if col in num_cols and col not in blacklist]
+cat_cols = [col for col in category_cols.columns if col in category_cols and col not in blacklist]
+num_cols = [col for col in df.columns if col in num_cols and col not in blacklist]
 
-# # CATEGORICAL COUNTPLOT
-# plt.figure(figsize=(40, 36), dpi=350)
-# for i, col in enumerate(cat_cols):
-#     plt.subplot(6, 5, i+1)
-#     sns.countplot(data=df, x=col, hue='Churn Value', palette='magma')
-#     plt.xticks(rotation=45)
-#     plt.title(f'Churn por {col}')
+# CATEGORICAL COUNTPLOT
+plt.figure(figsize=(40, 36), dpi=350)
+for i, col in enumerate(cat_cols):
+    plt.subplot(6, 5, i+1)
+    sns.countplot(data=df, x=col, hue='Churn Value', palette='magma')
+    plt.xticks(rotation=45)
+    plt.title(f'Churn for {col}')
 
-# plt.tight_layout()
-# plt.show()
+plt.tight_layout()
+plt.show()
 
 
-# # NUMERICAL COUNTPLOT
-# plt.figure(figsize=(40, 36), dpi=350)
-# for i, col in enumerate(num_cols):
-#     plt.subplot(6, 5, i+1)
-#     sns.countplot(data=df, x=col, hue='Churn Value', palette='coolwarm')
-#     plt.xticks(rotation=45)
-#     plt.title(f'Churn por {col}')
+# NUMERICAL COUNTPLOT
+plt.figure(figsize=(40, 36), dpi=350)
+for i, col in enumerate(num_cols):
+    plt.subplot(6, 5, i+1)
+    sns.countplot(data=df, x=col, hue='Churn Value', palette='coolwarm')
+    plt.xticks(rotation=45)
+    plt.title(f'Churn for {col}')
 
-# plt.tight_layout()
-# plt.show()
-
+plt.tight_layout()
+plt.show()
 
 #%% [markdown]
 # # --- X,y AND Train/Test ---
@@ -349,7 +343,7 @@ preprocessor = ColumnTransformer(
 #%%
 
 params = [
-    # --- MODEL 1: RandomForestClassifier: O mais lento ---
+    # --- MODEL 1: RandomForestClassifier: The Slowest ---
     {
     'model': [RandomForestClassifier(n_jobs=1, random_state=42, verbose=1 )],
     'model__n_estimators': [250, 500, 750],
@@ -357,7 +351,7 @@ params = [
     'model__class_weight': ['balanced', 'balanced_subsample', None],
     'model__min_samples_leaf': [1, 3]
     },
-    # --- MODEL 2: LGBMClassifier: O mais veloz ---
+    # --- MODEL 2: LGBMClassifier: The Fastest ---
     {
     'model': [LGBMClassifier(n_jobs=1, force_col_wise=True, random_state=42)],
     'model__n_estimators': [600, 1000, 2000],
@@ -371,7 +365,7 @@ params = [
     'model__importance_type': ['gain'],
     'model__objective': ['binary']
     },
-    # --- MODEL 3: XGBOOST: O mais robusto ---
+    # --- MODEL 3: XGBOOST: The Most Robust ---
     {
     'model': [XGBClassifier(n_jobs=1, force_col_wise=True, random_state=42)],
     'model__n_estimators': [200, 500, 900],
@@ -385,7 +379,7 @@ params = [
     'model__eval_metric': ['logloss'],
     'model__gamma':[0, 0.1, 1]
     },
-    # --- MODEL 4: CATBOOST: O que lida melhor com DataSet Majoritariamente categorico ---
+    # --- MODEL 4: CATBOOST: Works Better W/ Categorical Datasets ---
     {
     'model': [CatBoostClassifier(allow_writing_files=False, verbose=1, random_state=42)],
     'model__n_estimators': [500, 1000, 1500],
@@ -482,14 +476,14 @@ with mlflow.start_run() as r:
     plt.figure(dpi=350)
     plt.plot(roc_train[0], roc_train[1])
     plt.plot(roc_test[0], roc_test[1])
-    plt.legend([f"Treino: {roc_train_score:.2f}",
-               f"Teste: {roc_test_score:.2f}"])
+    plt.legend([f"Train: {roc_train_score:.2f}",
+               f"Test: {roc_test_score:.2f}"])
     plt.plot([0,1],[0,1], '--', color='black')
     plt.grid(True)
-    plt.title(f'Curva Roc')
+    plt.title(f'Roc Curve (Train/Test)')
+    plt.savefig('img/roc_curve_train_test.png')
+    mlflow.log_artifact('img/roc_curve_train_test.png')
     plt.show()
-    plt.savefig('img/curva_roc.png')
-    mlflow.log_artifact('img/curva_roc.png')
 
     best_model = model_fit.named_steps['grid'].best_estimator_.named_steps['model']
     model_name = best_model.__class__.__name__
@@ -516,17 +510,17 @@ with mlflow.start_run() as r:
     print('='*40)
 
     # PRINTING CLASSIFICATION REPORT TEST
-    print("--- Relatório de Classificação - TESTE ---")
+    print("--- Classification Report - TEST ---")
     print(metrics.classification_report(y_test, y_pred_test))
 
     # PRINTING CONFUSION MATRIX
-    print("--- Matriz de Confusão ---")
+    print("--- Confusion Matrix ---")
     metrics.ConfusionMatrixDisplay.from_predictions(y_test, y_pred_test, cmap='Blues')
     plt.show()
 
     # CALCULATING PROFITS WITH CHURNERS SAVED BY MODEL PRÉ THRESHOLD
     ltv_test = X_test['CLTV'].mean()
-    cost_test = ltv_test * 0.4
+    cost_test = ltv_test * 0.05
     sr_test = 0.5 # success rate
     threshold_profit_test = np.linspace(0, 1, 101)
     profits_test = [profit_calc(y_test, y_proba_test, ltv=ltv_test, cost=cost_test, sr=sr_test, threshold=t) for t in threshold_profit_test]
@@ -546,16 +540,31 @@ with mlflow.start_run() as r:
     # THRESHOLD PROFITS VS THRESHOLD MODEL
     plt.axvline(threshhold_first_test, linestyle=':', color='blue', label=f'ThresHold F1 {threshhold_first_test:.2f}' )
 
-    plt.title(f'Profit Curve by ThresHold \n Profit Max {max_proft_test:,.2f} in {best_threshold_profit_test:.2f}', fontsize=14)
+    plt.title(f'Profit Test Curve by ThresHold \n Profit Max {max_proft_test:,.2f} in {best_threshold_profit_test:.2f}', fontsize=14)
     plt.xlabel('Decision ThresHold (probability)', fontsize=12)
     plt.ylabel('Estimated Profit', fontsize = 12)
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    plt.show()
     plt.savefig('img/business_profit_curve_test.png')
     mlflow.log_artifact('img/business_profit_curve_test.png')
+    plt.show()
 
+    good_preds_test = (y_proba_test >= best_threshold_profit_test).astype(int)
+    tn_test, fp_test, fn_test, tp_test = metrics.confusion_matrix(y_test, good_preds_test).ravel()
+
+    total_money_risk_test = (tp_test + fn_test) * ltv_test
+    percent_save_test = (max_proft_test / total_money_risk_test) * 100
+
+    print('='*40)
+    print(f'Financial Impact Analysis (In Test)')
+    print(f'Total Risk Money {total_money_risk_test:.2f}')
+    print(f'Model Estimated Profit {max_proft_test:.2f}')
+    print(f'Percent Loss Saved {percent_save_test:.2f}')
+    print('='*40)
+
+    mlflow.log_metric("pct_revenue_saved_test", percent_save_test)
+    mlflow.log_metric("total_money_at_risk_test", total_money_risk_test)
     #/*****************************************************************************************/
 
     # TOP 10 BEST ESTIMATORS
@@ -563,7 +572,7 @@ with mlflow.start_run() as r:
     results_df = pd.DataFrame(model_fit.named_steps["grid"].cv_results_)
     results_df = results_df[cols_keeped]
     results_df = results_df.sort_values(by='rank_test_score')
-    print('Top 10 Melhores Modelos do Grid')
+    print('Top 10 Grid Models')
     pd.set_option('display.max_colwidth', None)
     display(results_df.head(5))
 
@@ -582,7 +591,7 @@ with mlflow.start_run() as r:
     plt.figure(figsize=(10, 8))
     sns.barplot(data=df_importance.head(10), x='Importance', y='Feature', 
                 palette='viridis', hue = 'Feature', legend=False)
-    plt.title(F'Importância das Features ({best_model})')
+    plt.title(F'Feature Importance ({best_model})')
     plt.show()
     print(df_importance.head(10))
 
@@ -593,14 +602,14 @@ with mlflow.start_run() as r:
 
     plt.figure(figsize=(8,8))
     plt.plot(prob_pred, prob_true, marker='o', linewidth=2, label=model_name)
-    plt.plot([0,1], [0,1], linestyle='--', color='gray', label='Perfeitamente Calibrado')
-    plt.ylabel('Fração de positivos reais (A realidade)')
-    plt.xlabel('Probabilidade preditiva (o que o modelo acha)')
-    plt.title('Curva de calibração')
+    plt.plot([0,1], [0,1], linestyle='--', color='gray', label='Calibrated Perfectly')
+    plt.ylabel('Real Positive Frac (Reality)')
+    plt.xlabel('Predicted Probability (Model predict)')
+    plt.title('Calibration Curve (Test)')
     plt.legend()
-    plt.show()
     plt.savefig('img/calibration_curve_test.png')
     mlflow.log_artifact('img/calibration_curve_test.png')
+    plt.show()
 
     X_calib, X_val, y_calib, y_val = train_test_split(X_test, y_test,
                                                     test_size=0.5, 
@@ -616,19 +625,19 @@ with mlflow.start_run() as r:
     y_true_test, y_prob_test = calibration_curve(y_test, y_proba_test, n_bins=10)
 
     plt.figure(figsize=(10,10))
-    plt.plot(y_prob_val, y_true_val, marker='s', label='Calibrado (Sigmoid)', color='green')
+    plt.plot(y_prob_val, y_true_val, marker='s', label='Calibrated (Sigmoid)', color='green')
     plt.plot(y_prob_test, y_true_test, marker='o', label='Original (Catboost)', color='red')
-    plt.plot([0,1], [0,1], linestyle='--', color='gray', label='Perfeitamente Calibrado')
-    plt.title('Calibrados: Antes (Exagerado) vs Depois (Realista)')
-    plt.xlabel('Probabilidade predita')
-    plt.ylabel('Fração real de positivos')
+    plt.plot([0,1], [0,1], linestyle='--', color='gray', label='Calibrated Perfectly')
+    plt.title('Calibration (Val): Before (Exaggerated) vs After (Realistic)')
+    plt.xlabel('Predicted Probability (Model predict)')
+    plt.ylabel('Real Positive Frac (Reality)')
     plt.legend()
-    plt.show()
     plt.savefig('img/calibration_curve_val.png')
     mlflow.log_artifact('img/calibration_curve_val.png')
+    plt.show()
 
         # PRINTING CLASSIFICATION REPORT
-    print("--- Relatório de Classificação - VALIDAÇÃO ---")
+    print("--- Classification Report - VALIDATION ---")
     print(metrics.classification_report(y_val, y_val_calibrated))
 
     #/*****************************************************************************************/
@@ -657,19 +666,19 @@ with mlflow.start_run() as r:
 
 
     # PRINTING METRICS WITH THRESHOLD
-    print(f'💰 Resultado FINAL PROD')
+    print(f'💰 Result Final Prod')
     print('='*40)
-    print(f'🎯 Threshold ótimo: {best_t:.2f}')
-    print(f'🏆 Melhor F1-Score: {best_f1:.4f}')
-    print(f'✅ Melhor Precision-Score: {best_precision:.4f} (de cada 100 ligações, acertamos {int(best_precision*100)})')
-    print(f'🎣 Melhor Recall-Score: {best_recall:.4f} (Recuperamos {int(best_recall*100)}% dos churners)')
-    print(f'🎖️ Melhor ROC AUC-Score: {best_roc_auc:.4f}')
+    print(f'🎯 Great Threshold: {best_t:.2f}')
+    print(f'🏆 Best F1-Score: {best_f1:.4f}')
+    print(f'✅ Best Precision-Score: {best_precision:.4f} (Of each 100 calls, we take {int(best_precision*100)} customers)')
+    print(f'🎣 Best Recall-Score: {best_recall:.4f} (Recovered {int(best_recall*100)}% of Churners)')
+    print(f'🎖️ Best ROC AUC-Score: {best_roc_auc:.4f}')
 
     #/*****************************************************************************************/
 
     # CALCULATING PROFITS WITH CHURNERS SAVED BY MODEL
     ltv = X_val['CLTV'].mean()
-    cost = ltv * 0.4
+    cost = ltv * 0.05
     sr = 0.5 # success rate
     threshold_profit = np.linspace(0, 1, 101)
     profits = [profit_calc(y_val, prob_val_calibrated, ltv=ltv, cost=cost, sr=sr, threshold=t) for t in threshold_profit]
@@ -689,15 +698,31 @@ with mlflow.start_run() as r:
     # THRESHOLD PROFITS VS THRESHOLD MODEL
     plt.axvline(best_t, linestyle=':', color='blue', label=f'ThresHold F1 {best_t:.2f}' )
 
-    plt.title(f'Profit Curve by ThresHold \n Profit Max {max_profit:,.2f} in {best_threshold_profit:.2f}', fontsize=14)
+    plt.title(f'Profit Val Curve by ThresHold \n Profit Max {max_profit:,.2f} in {best_threshold_profit:.2f}', fontsize=14)
     plt.xlabel('Decision ThresHold (probability)', fontsize=12)
     plt.ylabel('Estimated Profit', fontsize = 12)
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    plt.show()
     plt.savefig('img/business_profit_curve_final.png')
     mlflow.log_artifact('img/business_profit_curve_final.png')
+    plt.show()
+
+    good_preds_val = (prob_val_calibrated >= best_threshold_profit).astype(int)
+    tn_val, fp_val, fn_val, tp_val = metrics.confusion_matrix(y_val, good_preds_val).ravel()
+
+    total_money_risk_val = (tp_val + fn_val) * ltv
+    percent_save_val = (max_profit / total_money_risk_val) * 100
+
+    print('='*40)
+    print(f'Financial Impact Analysis (In val)')
+    print(f'Total Risk Money {total_money_risk_val:.2f}')
+    print(f'Model Estimated Profit {max_profit:.2f}')
+    print(f'Percent Loss Saved {percent_save_val:.2f}')
+    print('='*40)
+
+    mlflow.log_metric("pct_revenue_saved_val", percent_save_val)
+    mlflow.log_metric("total_money_at_risk_val", total_money_risk_val)
 
     #/*****************************************************************************************/
 
@@ -799,12 +824,12 @@ new_data = pd.DataFrame({
 #%%
 
 proba = model.predict_proba(new_data)[:, 1]
-threshold_otimo = 0.40
-decisao_final = (proba >= threshold_otimo).astype(int)
+threshold_great = 0.40
+final_decision = (proba >= threshold_great).astype(int)
 
 #%% [markdown]
 # ## --- ANALYSING NEW RESULT ---
 #%%
 
 print(f"🎲 Probabilidade de Churn: {proba[0]*100:.2f}%")
-print(f"⚖️ Decisão (Corte {threshold_otimo}): {'🔴 CHURN' if decisao_final[0] == 1 else '🟢 RETER'}")
+print(f"⚖️ Decision (ThresHold {threshold_great}): {'🔴 CHURN' if final_decision[0] == 1 else '🟢 RETAIN'}")

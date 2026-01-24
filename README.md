@@ -24,37 +24,37 @@ A estrutura de dados foi construída com `Scikit-Learn` incluindo:
 * **Limpeza e Transformação:** na feature **"Total Charges"** por conta de registro de espaço na coluna.
 
 
-## 📊 Resultados (Test Validation Pré Threshold)
+## 📊 Resultados (Teste Pré Threshold)
 
 | Métricas | Valor Final |
 |----------|-------------|
-| **Threshold** | **0.50** (Calibrador de probabilidades) |
-| **Precision** | **54%** (Assertividade percentual dos apontamentos de fraude) |
-| **Recall**    | **81%** (Capacidade de detecção) |
+| **Threshold** | **0.50** (Calibrador de probabilidades padrão do modelo) |
+| **Precision** | **55%** (Assertividade percentual dos apontamentos de fraude) |
+| **Recall**    | **79%** (Capacidade de detecção) |
 | **F1-Score**  | **65%** (Equilíbrio entre Precision x Recall) |
 | **ROC AUC**   | **78%** (Capacidade de separação entre Churn e Não churn) |
 
 
-### Performance Test: Curva de Calibração
+### Performance Teste: Curva de Calibração
 > *O gráfico linha abaixo mostra como se comportou o modelo durante o teste, e sua performance de calibração comparada ao modelo perfeito*
 
 ![Curva de Calibração](img/calibration_curve_test.png)
 
-### Performance Financeira Test
-> *O gráfico de barras abaixo mostra o resultado financeiro do modelo.
-Entregando um valor de **$9.000** dolares de prejuizo evitados, que equivalem a **70%** do total das tentativas de fraude*
+### Performance Financeira Teste
+> *O gráfico de barras abaixo mostra o resultado financeiro do modelo no Teste.
+Entregando um valor de **$753 Mil** dolares de churns evitados, que equivalem a **36%** do valor total movimentado pelos clientes na base teste (com Threshold ótimo de lucro para a base teste em 0.17 e Threshold ótimo para o modelo em 0.5)*
 
 ![Resultado Financeiro Test](img/business_profit_curve_test.png)
 
-## 📊 Resultados (Test Validation w/ Threshold)
+## 📊 Resultados (Validação com Threshold)
 
 | Métricas | Valor Final |
 |----------|-------------|
-| **Threshold** | **0.40** (Calibrador de probabilidades) |
-| **Precision** | **70%** (Assertividade percentual dos apontamentos de fraude) |
-| **Recall**    | **60%** (Capacidade de detecção) |
+| **Threshold** | **0.30** (Calibrador ótimo de probabilidades da base de validação) |
+| **Precision** | **69%** (Assertividade percentual dos apontamentos de fraude) |
+| **Recall**    | **61%** (Capacidade de detecção) |
 | **F1-Score**  | **65%** (Equilíbrio entre Precision x Recall) |
-| **ROC AUC**   | **80%** (Capacidade de separação entre Churn e Não churn) |
+| **ROC AUC**   | **81%** (Capacidade de separação entre Churn e Não churn) |
 
 
 ### Performance Calibrada: Curva de Calibração
@@ -63,18 +63,34 @@ Entregando um valor de **$9.000** dolares de prejuizo evitados, que equivalem a 
 ![Curva de Calibração Final](img/calibration_curve_val.png)
 
 ### Performance Financeira Calibrada
-> *O gráfico de barras abaixo mostra o resultado financeiro do modelo calibrado.
-Entregando um valor de **$14.000** dolares de prejuizo evitados, que equivalem a **X%** do total de churns ocorridos*
+> *O gráfico de barras abaixo mostra o resultado financeiro do modelo na validação.
+Entregando um valor de **$388 Mil** dolares de churns evitados, que equivalem a **37%** do valor total movimentado pelos clientes na base de validação (com Threshold ótimo de lucro para a base de validação em 0.11 e Threshold ótimo para o modelo em 0.3)*
+
 
 ![Resultado Financeiro Calibrada](img/business_profit_curve_final.png)
 
+## Conclusão e Recomendação de Negócio
+**A escolha do ponto de operação do modelo depende da estratégia momentânea da empresa, apresentando dois cenários distintos:**
+* **1. Estratégia de "Proteção Agressiva" (Threshold 0.11):** 
+   * **Foco:** Maximizar a retenção financeira a qualquer custo (Lucro Líquido Estimado: Máximo).
+   
+   * **Cenário ideal:** Campanhas de baixo custo operacional (ex: E-mail automatizado, SMS, Push Notification) onde o custo de um "Falso Positivo" é irrisório.
+   
+   * **Risco:** Abordar uma grande parcela da base, gerando possíveis descontos desnecessários (canibalização) para clientes que não sairiam.
+* **2. Estratégia "Cirúrgica / Eficiência Operacional" (Threshold 0.30):** 
+   * **Foco:** Equilíbrio entre recuperação de receita e precisão da equipe (Melhor F1-Score).
+s
+   * **Cenário ideal:** Ações de alto custo (ex: Ligação de Gerente de Conta, Retenção ativa via Call Center) onde o tempo da equipe é limitado.
+   
+   * **Vantagem:** Evita o desgaste da base de clientes fiéis e garante que cada contato tenha uma alta probabilidade de conversão.
 
+* **Recomendação Final:** Considerando que o custo de retenção simulado foi baixo (5% da média do LTV), recomenda-se iniciar com uma abordagem híbrida (ex: Threshold 0.20), monitorando a taxa de conversão da equipe de retenção e ajustando a régua conforme a capacidade operacional.
 
 ## 🚀 Como Rodar o Projeto
 
 1. **Clone o repositório:**
    ```bash
-   git clone [git@github.com:savioricardog/fraud-detection.git](https://github.com/savioricardog/fraud-detection.git)
+   git clone [git@github.com:savioricardog/churn-predict.git](https://github.com/savioricardog/churn-predict.git)
 
 2. **Instale as dependências:**
    ```bash 
@@ -82,17 +98,22 @@ Entregando um valor de **$14.000** dolares de prejuizo evitados, que equivalem a
 
 3. **Execute o arquivos :**
    ```bash 
-   python fraud-detection-V2.py
+   python churn-predict.py.py
 
 ## 📂 Estrutura de Arquivos 
 
-fraud-detection.py: Estrutura principal de treinamento.
+* **churn-predict.py:** Estrutura principal de treinamento.
 
-fraud-detection.ipynb: Arquivo em modelo Jupyter.
+* **churn-predict.ipynb:** Arquivo em modelo Jupyter.
 
-requirements.txt: Dependências do ambiente.
+* **requirements.txt:** Dependências do ambiente.
 
-models/model_fraud_V2.pkl: Modelo treinado.
-
+* **model:**
+   * **import MlFlow**
+   * **Carregar o modelo diretamente do MLFlow:**
+      * versions = mlflow.search_model_versions(filter_string= "name = 'model_churn'") 
+      * last_version = max([int(i.version) for i in versions])
+      * model = mlflow.sklearn.load_model(f"models:///model_churn/{last_version}")
+      * predictions = model.predict(data)
 
 **Desenvolvido por Savio Ricardo Garcia 👨‍💻**
