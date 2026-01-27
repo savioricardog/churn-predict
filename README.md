@@ -103,7 +103,7 @@ s
 
 3. **Execute o arquivos :**
    ```bash 
-   python churn-predict.py.py
+   python src/train_pipeline.py
 
 ## 📂 Estrutura de Arquivos 
 
