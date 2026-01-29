@@ -1,0 +1,5 @@
+mlflow==3.8.1
+catboost
+scikit-learn
+pandas
+numpy

@@ -1,0 +1,17 @@
+# Ignorar ambiente virtual local (ajuste o nome se for diferente)
+env/
+venv/
+.env/
+
+# Ignorar arquivos temporários do Python
+__pycache__/
+*.pyc
+
+# Ignorar git
+.git/
+
+# Ignorar notebooks (opcional, já que não usamos em prod)
+notebooks/
+
+# Ignorar imagens geradas
+img/

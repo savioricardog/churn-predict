@@ -9,25 +9,47 @@ import sys
 
 # Config enviroment
 current_dir = os.path.dirname(os.path.abspath(__file__)) # searching src folder
-
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
 
 if project_root not in sys.path:
     sys.path.append(project_root)
 
 try:
-    from src.eng_funcs import CleanTransformStrNum, profit_calc
+    from src.eng_funcs import CleanTransformStrNum
 except ImportError:
     from eng_funcs import CleanTransformStrNum
 
 # CONFIG MLFLOW
-MLFLOW_URI = "http://localhost:5000"
-EXPERIMENT_ID = "1"
-MODEL_NAME_IN_MLFLOW = "churn_model_calibrated_prod"
+# MLFLOW_URI = os.getenv("MLFLOW_URI", "http://localhost:5000")
+# EXPERIMENT_ID = "1"
+# MODEL_NAME_IN_MLFLOW = "churn_model_calibrated_prod"
 
+MODEL_PATH_IN_DOCKER = "/app/model_prod"
 
 # CREATING OBJECT APP
 app = FastAPI()
+model = None
+
+# --- 2. FUNÇÃO INTELIGENTE DE BUSCA ---
+def find_model_path(base_path="/app/model_prod"):
+    """
+    Procura pelo arquivo 'MLmodel' ou 'model.pkl' recursivamente
+    para descobrir onde o MLflow salvou os arquivos.
+    """
+    print(f"🕵️‍♂️ Investigando arquivos em: {base_path}")
+    
+    if not os.path.exists(base_path):
+        print(f"❌ Folder {base_path} not exist in DOCKER.")
+        return None
+
+    # Lista tudo que tem lá dentro para debug
+    for root, dirs, files in os.walk(base_path):
+        print(f"   📁 {root} contém: {files}")
+        if "MLmodel" in files or "model.pkl" in files:
+            print(f"✅ MODEL FOUND IN: {root}")
+            return root
+            
+    return base_path # Retorna o padrão se não achar nada específico
 
 # --- CLASS PAD (MODEL DATA) ---
 class CustomerData(BaseModel):
@@ -87,7 +109,10 @@ class CustomerData(BaseModel):
                     "Tenure_Months": 12,
                     "Monthly_Charges": 70.0,
                     "Total_Charges": 840.0,
-                    "CLTV": 400
+                    "CLTV": 400,
+                    "Country": "United States",
+                    "State": "California",
+                    "Zip_Code": 90210
             }
         }
 
@@ -103,12 +128,11 @@ def process_input(data: CustomerData):
     df['Monthly Charges'] = pd.to_numeric(df['Monthly Charges'], errors='coerce').fillna(0)
     df['Tenure Months'] = pd.to_numeric(df['Tenure Months'], errors='coerce').fillna(0)
 
-    # # LOC FEATURES
-    # df['Country'] = 'United States'
-    # df['State'] = 'California'
-    # df['Zip Code'] = 90210
-
-
+    # Lógica de contrato
+    def get_contract_months(x):
+        if x == 'Two year': return 24
+        if x == 'One year': return 12
+        return 1
     # CREATING NEW FEATURES
     df['Price Up Recently'] = np.where(
                                 df['Tenure Months'] > 0,
@@ -175,28 +199,38 @@ def process_input(data: CustomerData):
 def load_model():
     global model
     try:
-        print(f"Connecting to MLFLOW in {MLFLOW_URI}...")
-        mlflow.set_tracking_uri(MLFLOW_URI)
+        print(f"Connecting to MLFLOW in {MODEL_PATH_IN_DOCKER}...")
+        # mlflow.set_tracking_uri(MLFLOW_URI)
+        real_model_path = find_model_path("/app/model_prod")
 
-        print("Searching for best model...")
+        if real_model_path:
+            print(f"Loading model from: {real_model_path}")
+            model = mlflow.sklearn.load_model(real_model_path)
+            print("✅ Model Loaded...")
+        else:
+            print("❌ ERROR: folder or model not exist...")
+
+        # print("Searching for best model...")
 
         # searching experiments into mlflow
-        runs = mlflow.search_runs(experiment_ids=[EXPERIMENT_ID])
+        # runs = mlflow.search_runs(experiment_ids=[EXPERIMENT_ID])
 
-        if runs.empty:
-            print("WARNING: No model found! API will works, but predict will fail!")
-            return
+        # if runs.empty:
+        #     print("WARNING: No model found! API will works, but predict will fail!")
+        #     return
         
-        last_run_id = runs.sort_values("start_time", ascending=False).iloc[0].run_id
+        # last_run_id = runs.sort_values("start_time", ascending=False).iloc[0].run_id
 
-        model_uri = f"runs:/{last_run_id}/{MODEL_NAME_IN_MLFLOW}"
+        # model_uri = f"runs:/{last_run_id}/{MODEL_NAME_IN_MLFLOW}"
 
-        print(f"Loading model from: {model_uri}")
-        model = mlflow.sklearn.load_model(model_uri)
-        print("Model load successfull!✅")
+        # print(f"Loading model from: {model_uri}")
+        # model = mlflow.sklearn.load_model(model_uri)
+        # print("Model load successfull!✅")
 
     except Exception as e:
         print(f"❌ Error while loading model {e}")
+        import traceback
+        traceback.print_exc()
 
 # --- Route 1: Home page ---
 @app.get("/") # when access main address "/", run this func
