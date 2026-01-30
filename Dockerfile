@@ -1,25 +1,35 @@
-# 1. Imagem Base
+# 1. BASE IMAGE
 FROM python:3.11-slim
 
-# 2. Pasta de Trabalho
+# 2. CREATE WORK FOLDER (CREATING IN CONTAINER LINUX LIKE cd C://APPS) AND ENTER IN THE FOLDER
 WORKDIR /app
 
-# --- A CURA DO PROBLEMA 👇 ---
-# Instala bibliotecas do Linux essenciais para ML (OpenMP e Fortran)
+# --- THE ISSUE CURE 👇 ---
+# INSTALLING ESSENCIAL LINUX LIBS TO ML (OpenMP e Fortran)
+# DOWNLOAD LIBRARY MANAGER LIST -> && (AND CONDICTION) -> INSTALL EVERYTHING I ORDER WITHOUT ASK ABOUT YES OR NO \ 
+# LIB libgomp1 TO INSTALL \ LIB libgfortran5 TO INSTALL \ && (AND CONDICTION) -> DELETE LIBRARY MANAGER LIST
 RUN apt-get update && apt-get install -y \
     libgomp1 \
     libgfortran5 \
     && rm -rf /var/lib/apt/lists/*
 # -----------------------------
 
-# 3. Dependências Python
+# 3. COPYING AND INSTALLING PYTHON DEPENDENCES
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Copia o Modelo e o Código
+# 4. COPYING MODEL CODE AND MODEL
 COPY model_prod /app/model_prod
-COPY . .
 
-# 5. Configurações
+# COPY EVERYTHING INTO THE WINDOWS FOLDER (CUSTOMER-CHRUN) AND SEND TO CONTAINER /APP
+# FIRST DOT (WINDOWS) | SECOND DOT (CONTAINER LINUX: WORKDIR /app)
+COPY . . 
+
+# 5. CONFIGS
+# NOTIFYINF USED PORT IS 8000
 EXPOSE 8000
+
+# RUN: CREATE|INSTALLING (WHEN IMAGES IS BEING CREATED) | CMD: ACTIVATE ONLY WHEN USE "DOCKER RUN"
+# [] PROFESSIONAL AND SECURITY FORM (EXEC FORM TECNICAL NAME)
+# DEPLOY DOCKER IMAGE -> RUN PROGRAM PYTHON -> USING SRC/APP.PY AS PARAMETER (FOR REAL IS THE CORRECT PYTHON FILE)
 CMD ["python", "src/app.py"]

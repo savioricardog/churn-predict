@@ -1,3 +1,4 @@
+# LIBS IMPORTS
 from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel
@@ -9,50 +10,59 @@ import sys
 
 # Config enviroment
 current_dir = os.path.dirname(os.path.abspath(__file__)) # searching src folder
-project_root = os.path.abspath(os.path.join(current_dir, '..'))
+project_root = os.path.abspath(os.path.join(current_dir, '..')) # BACKING SOURCE FOLDER OF PROJECT
 
+#%%
 if project_root not in sys.path:
-    sys.path.append(project_root)
-
+    sys.path.append(project_root) #TELLING PYTHON:LOOK BEYOND THE SRC FOLDER,ALSO LOOK THE CUSTOMER-CHURN FOLDER
 try:
     from src.eng_funcs import CleanTransformStrNum
+    print("src.eng_funcs.CleanTransformStrNum imported")
 except ImportError:
     from eng_funcs import CleanTransformStrNum
+    print("eng_funcs.CleanTransformStrNum imported")
 
 # CONFIG MLFLOW
 # MLFLOW_URI = os.getenv("MLFLOW_URI", "http://localhost:5000")
 # EXPERIMENT_ID = "1"
 # MODEL_NAME_IN_MLFLOW = "churn_model_calibrated_prod"
 
-MODEL_PATH_IN_DOCKER = "/app/model_prod"
+MODEL_PATH_IN_DOCKER = "/app/model_prod" # DEFINING MODEL FOLDER NAME/PATH IN DOCKER
 
 # CREATING OBJECT APP
 app = FastAPI()
 model = None
 
-# --- 2. FUNÇÃO INTELIGENTE DE BUSCA ---
+# --- 2. SMART SEARCHING FUCTION ---
 def find_model_path(base_path="/app/model_prod"):
     """
-    Procura pelo arquivo 'MLmodel' ou 'model.pkl' recursivamente
-    para descobrir onde o MLflow salvou os arquivos.
+    Searching for archive 'MLmodel' or 'model.pkl' recursively
+    to discovery where the MLflow saved the files.
     """
-    print(f"🕵️‍♂️ Investigando arquivos em: {base_path}")
+    print(f"🕵️‍♂️ Investigating files in: {base_path}")
     
     if not os.path.exists(base_path):
         print(f"❌ Folder {base_path} not exist in DOCKER.")
         return None
 
-    # Lista tudo que tem lá dentro para debug
+    # LIST OFF EVERYTHING EXISTS IN FOLDER AND SEARCH FOR MLmodel OR model.pkl
     for root, dirs, files in os.walk(base_path):
-        print(f"   📁 {root} contém: {files}")
+        print(f"📁 {root} contains: {files}")
         if "MLmodel" in files or "model.pkl" in files:
             print(f"✅ MODEL FOUND IN: {root}")
             return root
             
-    return base_path # Retorna o padrão se não achar nada específico
+    return base_path # RETURN DEFAULT PATH IF NOT FOUND MODEL
 
-# --- CLASS PAD (MODEL DATA) ---
+# --- CLASS DEFAULT (MODEL DATA) ---
 class CustomerData(BaseModel):
+    """
+    DEFINING DATA TYPES
+    BaseModel roles:
+    1° VALIDATE PRE DEFINED DATA TYPES
+    2° SMART VALIDATION (CONVERTS "12" STRING TO 12 INT AUTOMATICALLY)
+    3° CREATE SWAGGER UI AND DOCUMENTATION IN NAVIGATOR
+    """
     # IDS and Cats
     Gender: str
     Senior_Citizen: str
@@ -87,6 +97,7 @@ class CustomerData(BaseModel):
     Longitude: float= 0.0
     City: str = "Unknown"
 
+    # JSON FORMAT EXAMPLE
     class Config:
         json_schema_extra = {
             "example":{
@@ -116,23 +127,28 @@ class CustomerData(BaseModel):
             }
         }
 
-# --- FEATURE ENGINE AND DATA TRANSFORMATION IN REAL TIME
+# --- FEATURE ENGINE AND DATA TRANSFORMATION IN REAL TIME WHICH HELP TO MAKE PREDICTION
 def process_input(data: CustomerData):
+    '''
+    Docstring for process_input
+    :param data: Description
+    :type data: CustomerData
+
+    FUNCTION TO COPY FEATURE ENGINEERING FROM TRAIN_PIPELINE (WHERE I TRAINED MODEL) 
+    TO APP (WHERE I WILL SEND DATA TO API AND MODEL WILL DO CHURN PREDICTION) 
+    '''
     try:
         df = pd.DataFrame([data.dict()]) 
+        print("Data Dictionary loaded")
     except AttributeError:
         df = pd.DataFrame([data.model_dump()]) # Fallback para Pydantic V2
+        print("Data model dump loaded")
     
     df.columns = [col.replace('_', ' ') for col in df.columns] # REPLACING _ TO ' '
     df['Total Charges'] = pd.to_numeric(df['Total Charges'], errors='coerce').fillna(0)
     df['Monthly Charges'] = pd.to_numeric(df['Monthly Charges'], errors='coerce').fillna(0)
     df['Tenure Months'] = pd.to_numeric(df['Tenure Months'], errors='coerce').fillna(0)
-
-    # Lógica de contrato
-    def get_contract_months(x):
-        if x == 'Two year': return 24
-        if x == 'One year': return 12
-        return 1
+    
     # CREATING NEW FEATURES
     df['Price Up Recently'] = np.where(
                                 df['Tenure Months'] > 0,
@@ -176,8 +192,13 @@ def process_input(data: CustomerData):
                                     | (df['Payment Method'] == 'Bank transfer (automatic)'),
                                         0, 1)
                                         
-    df['Time Contract'] = df['Contract'].apply(lambda x: 24 if x == 'Two year' else
-                                                12 if x == 'One year' else  1).astype(int)
+    # CONVERTING CONTRACT TIME TYPE
+    def get_contract_months(x):
+        if x == 'Two year': return 24
+        if x == 'One year': return 12
+        return 1
+    
+    df['Time Contract'] = df['Contract'].apply(get_contract_months).astype(int)
                                                 
     df['Months to Renewal'] = df['Time Contract'] - (df['Tenure Months'] % df['Time Contract'])
     df['Last Three Months'] = np.where(df['Time Contract'] <= 3, 1, 0)
@@ -192,12 +213,17 @@ def process_input(data: CustomerData):
     df['Value Ratio'] = df['CLTV'] / df['Monthly Charges']
     df['Social Isolation'] = (df['Family'].astype(int) + df['Senior Vulnerable'])
 
+    print("Data Transformation end.")
+
     return df
 
 # --- LOADING MODEL INTO API ---
-@app.on_event("startup")
+@app.on_event("startup") # RUN CODE BELOW AS SOON AS API ONLINE
 def load_model():
-    global model
+    '''
+    FUNCTION CREATED TO FIND AND LOAD MODEL FILE TO DEPLOY IN API (PRODUCTION)
+    '''
+    global model # DEFINING GLOBAL VARIABLE (BESIDES ONLY FUNCTION VARIABLE)
     try:
         print(f"Connecting to MLFLOW in {MODEL_PATH_IN_DOCKER}...")
         # mlflow.set_tracking_uri(MLFLOW_URI)
@@ -233,13 +259,25 @@ def load_model():
         traceback.print_exc()
 
 # --- Route 1: Home page ---
-@app.get("/") # when access main address "/", run this func
+@app.get("/") # DECORATOR: when run api and access main address API (GET MODE), run this func below
 def home():
+    '''
+    FUNCTION TO DISPLAY IF API IS ONLINE OR OFFLINE AND IT STATUS
+    '''
     status = "API is On!" if model else "Online but without model loaded"
     return {"Message": status }
 
-@app.post("/predict")
+@app.post("/predict") # DECORATOR: WHEN RUN API AND RECEIVES DATA TO USE IN PREDICTION (POST MODE), run this func below
 def predict_churn(dados: CustomerData):
+    '''
+    Docstring for predict_churn
+    
+    :param dados: Description
+    :type dados: CustomerData
+
+    FUNCTION CREATED TO COPY PREDICT FROM TRAIN_PIPELINE TO API FOR MODEL USE TO PREDICT CHURN
+    VALUES WHEN RECEIVES DATA
+    '''
     if not model:
         raise HTTPException(status_code=503, detail="MODEL OFFLINE. VERIFY!")
     
@@ -250,7 +288,6 @@ def predict_churn(dados: CustomerData):
     # --- PREDICTIONS ---
     try:
         prob = float(model.predict_proba(df_ready)[:,1][0])
-
         threshold = 0.3
         decision = "Churn" if prob >= threshold else "Retain"
 
@@ -270,6 +307,6 @@ def predict_churn(dados: CustomerData):
 
 
 # --- Execution block ---
-# If this archive run, turn on port 8000 in server
+# If run this file (kind: python app.py), turn on host 0.0.0.0 in 8000 port in server
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

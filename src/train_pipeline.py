@@ -36,11 +36,11 @@ try:
     print("✅ src.eng_funs imported successfully!")
 
 except ImportError:
-    # Caso você rode de dentro da pasta src, o import muda. 
-    # O ideal é sempre rodar da raiz: python src/train_pipeline.py
+    # if you run this inside src folder, the import changes. 
+    # the ideal is always run from source: python src/train_pipeline.py
     print("Warning: cannot possible import src.eng_funcs. Verify path.")
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE" #creating enviroment variable to ignore duplicated version of libiomp5 and continue running
 
 mlflow.set_tracking_uri("http://localhost:5000")
 mlflow.set_experiment(experiment_id='1')

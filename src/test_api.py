@@ -2,10 +2,10 @@ import requests
 import json
 
 # API URL
-url = "http://localhost:8000/predict"
+url = "http://localhost:8000/predict" # DEFINING API URL
 
-# Dados de um cliente (Simulando o sistema da empresa enviando)
-cliente = {
+# DATA TESTINT TO PREDICT (IN JSON FORMAT)
+client = {
         "Gender": "Female",
         "Senior_Citizen": "No",
         "Partner": "No",
@@ -31,14 +31,14 @@ cliente = {
         "Zip_Code": 90210
 }
 
-print("📡 Enviando dados para o Modelo...")
-response = requests.post(url, json=cliente)
+print("📡 sENDING DATA TO MODEL...")
+response = requests.post(url, json=client)
 
 if response.status_code == 200:
     resultado = response.json()
-    print("\n✅ Resposta Recebida:")
-    print(f"🔮 Previsão: {resultado['prediction']}")
-    print(f"📊 Risco: {resultado['risk_percent']}%")
-    print(f"📝 Explicação: {resultado['explanation']}")
+    print("\n✅ ANSWER ARRIVED:")
+    print(f"🔮 PREVISION: {resultado['prediction']}")
+    print(f"📊 RISK VALUE: {resultado['risk_percent']}%")
+    print(f"📝 EXPLANATION: {resultado['explanation']}")
 else:
-    print("❌ Erro:", response.text)
+    print("❌ Error:", response.text)

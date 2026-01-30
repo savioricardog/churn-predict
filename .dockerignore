@@ -15,3 +15,15 @@ notebooks/
 
 # Ignorar imagens geradas
 img/
+
+# IGNORAR VSCODE
+.vscode/
+
+#ignorar mlflow
+mlartifacts/
+mlruns/
+mlflow.db
+
+#ignorar outro
+backup/
+README.md
